@@ -52,4 +52,4 @@ if __name__ == '__main__':
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
     print(f'Found {len(needed_ids)} snomed ids in the DyHealthNet data')
     print(f'Found {len(needed_ids.intersection(available_snomed_ids))} snomed ids in both')
-    
+
