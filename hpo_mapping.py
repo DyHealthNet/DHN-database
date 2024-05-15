@@ -3,15 +3,30 @@ import json
 import pandas as pd
 import networkx as nx
 import urllib.request
+
+import requests
+
 from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_ids
 
 
 def download_hpo_ontology(data_dir: str):
     # find the latest release of the HPO ontology
-    mapping_link = 'https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2024-04-26/hp.json'
+    url = 'https://api.github.com/repos/obophenotype/human-phenotype-ontology/releases/latest'
+    response = requests.get(url)
+    response = response.json()
+    # check for the assets in the release
+    mapping_link, phenotype_link = None, None
+    for asset in response['assets']:
+        if asset['name'] == 'hp.json':
+            mapping_link = asset['browser_download_url']
+        if asset['name'] == 'phenotype.hpoa':
+            phenotype_link = asset['browser_download_url']
+    if not mapping_link or not phenotype_link:
+        raise ValueError('Could not find the HPO ontology files, please check the release on github and download '
+                         'the hp.json and phenotype.hpoa files manually')
+
     download_path = f'{data_dir}/hp.json'
     urllib.request.urlretrieve(mapping_link, download_path)
-    phenotype_link = 'https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2024-04-26/phenotype.hpoa'
     download_path = f'{data_dir}/phenotype.hpoa'
     urllib.request.urlretrieve(phenotype_link, download_path)
 
@@ -84,5 +99,5 @@ if __name__ == '__main__':
     print(f'Found {len(snomed_to_omim)} snomed ids with OMIM ids')
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
 
-    
+
 
