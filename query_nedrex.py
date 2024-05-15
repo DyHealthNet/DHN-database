@@ -93,8 +93,8 @@ if __name__ == '__main__':
             if mondo_id is None:
                 print(f"No mondo id found for snomedct code {snomed_id}")
                 continue
-            if not mondo_id in assoc_graph:
-                print(f"No harmonizome data found for mondo id {mondo_id}")
+            if not mondo_id in assoc_graph and not get_harmonizome_data(mondo_id):
+                print(f"Neither mondo id nor harmonizome data found for mondo id {mondo_id}")
                 continue
             found += 1
         continue

@@ -6,10 +6,15 @@ import urllib.request
 
 import requests
 
-from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_ids
+from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_ids, get_all_associations, get_harmonizome_data
 
 
-def download_hpo_ontology(data_dir: str):
+def download_hpo_ontology(data_dir: str) -> None:
+    """
+    Download the HPO ontology files from the latest release on github
+    :param data_dir: directory where the files should be stored
+    :return: None
+    """
     # find the latest release of the HPO ontology
     url = 'https://api.github.com/repos/obophenotype/human-phenotype-ontology/releases/latest'
     response = requests.get(url)
@@ -31,13 +36,23 @@ def download_hpo_ontology(data_dir: str):
     urllib.request.urlretrieve(phenotype_link, download_path)
 
 
-def read_hpo_ontology(hpo_path: str):
+def read_hpo_ontology(hpo_path: str) -> dict:
+    """
+    Reads the HPO ontology json file
+    :param hpo_path: path to the HPO ontology json file
+    :return: dictionary with the HPO ontology data
+    """
     with open(hpo_path, 'r') as f:
         hpo = json.load(f)
     return hpo
 
 
-def ontology_data_to_network(hpo_data: dict):
+def ontology_data_to_network(hpo_data: dict) -> nx.Graph:
+    """
+    Convert the HPO ontology data to a networkx graph
+    :param hpo_data: downloaded HPO ontology data
+    :return: graph of the HPO ontology with nodes as HPO ids and edges as relationships
+    """
     graph = nx.Graph()
     for node in hpo_data['graphs'][0]['nodes']:
         node_id = node['id']
@@ -49,7 +64,13 @@ def ontology_data_to_network(hpo_data: dict):
     return graph
 
 
-def snomed_from_hpo(hpo_graph, needed_snomed_ids):
+def snomed_from_hpo(hpo_graph, needed_snomed_ids) -> dict:
+    """
+    Find the SNOMED ids in the HPO ontology that are needed
+    :param hpo_graph: Graph of the HPO ontology
+    :param needed_snomed_ids: set of snomed ids that are needed
+    :return: mapping from snomed ids to HPO ids
+    """
     snomed_ids = {}
     for node in hpo_graph.nodes(data=True):
         xrefs = node[1].get('xrefs', [])
@@ -62,19 +83,45 @@ def snomed_from_hpo(hpo_graph, needed_snomed_ids):
     return snomed_ids
 
 
-def hpo_to_omim(data_dir, snomed_id_mapping):
+def hpo_to_xref(data_dir, snomed_id_mapping) -> dict:
+    """
+    Reads the HPOA file and maps the snomed ids to OMIM or ORPHA ids
+    :param data_dir: directory where the HPOA file is stored
+    :param snomed_id_mapping: mapping from snomed ids to HPO ids
+    :return: mapping from snomed ids to OMIM or ORPHA ids
+    """
     # read the HPOA file
     hpoa = pd.read_csv(f'{data_dir}/phenotype.hpoa', sep='\t', comment='#', low_memory=False)
     # convert the hpoa to a dict with hpo_id as key, database_id as value
-    hpoa_dict = hpoa.set_index('hpo_id')['database_id'].to_dict()
+    hpoa_database = hpoa.set_index('hpo_id')['database_id'].to_dict()
     # convert the snomed_id_mapping to a dict with snomed_id as key, hpo_id as value
     snomed_to_omim = {}
     for key, value in snomed_id_mapping.items():
         try:
-            snomed_to_omim[key] = hpoa_dict[value]
+            snomed_to_omim[key] = hpoa_database[value]
         except KeyError:
             pass
     return snomed_to_omim
+
+
+def disorder_to_mondo(disease_data, snomed_to_db) -> dict:
+    """
+    Convert the snomed ids to OMIM or ORPHA ids and then to Mondo ids
+    :param disease_data: disease data from the NEDREx API
+    :param snomed_to_db: mapping from snomed ids to OMIM or ORPHA ids
+    :return: mapping from snomed ids to Mondo ids
+    """
+    omim_ids = domain_id_to_mondo(disease_data, 'omim')
+    orpha_ids = domain_id_to_mondo(disease_data, 'orpha')
+    snomed_to_mondo = {}
+    for key, value in snomed_to_db.items():
+        raw_id = value.split(':')[-1]
+        if value.startswith('OMIM'):
+            snomed_to_mondo[key] = omim_ids.get(raw_id, None)
+        elif value.startswith('ORPHA'):
+            snomed_to_mondo[key] = orpha_ids.get(raw_id, None)
+    # remove the None values
+    return {k: v for k, v in snomed_to_mondo.items() if v is not None}
 
 
 if __name__ == '__main__':
@@ -86,18 +133,33 @@ if __name__ == '__main__':
     if not all([os.path.exists(f) for f in needed_files]):
         download_hpo_ontology(data_dir)
 
-    # HPO conversion
+    # HPO conversion: Pathway
+    # HPO data (HPO_ID ----> SNOMED_ID) - look for needed SNOMED IDs
+    # -> map to external database (SNOMED_ID -- HPO_ID --> OMIM_ID/ORPHA_ID)
+    # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
+    # -> get associated genes (SNOMED_ID -- Mondo_ID --> Genes)
+
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)
     needed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
     needed_ids = set(needed_ids['snomed_id'].unique())
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
     available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
-
-    # convert the snomed ids to OMIM ids
-    snomed_to_omim = hpo_to_omim(data_dir, available_snomed_ids)
-    print(f'Found {len(snomed_to_omim)} snomed ids with OMIM ids')
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
 
+    # convert the snomed ids to OMIM ids
+    snomed_to_xref = hpo_to_xref(data_dir, available_snomed_ids)
+    print(f'Found {len(snomed_to_xref)} snomed ids with OMIM/ORPHA ids')
 
-
+    # get the disorder data
+    disorder_data = get_disorder_data()
+    final_mapping = disorder_to_mondo(disorder_data, snomed_to_xref)
+    print(f'Found {len(final_mapping)} snomed ids with Mondo ids')
+    # find the genes that are associated with the mondo ids
+    assoc_graph = get_all_associations()
+    found = 0
+    for snomed_id, mondo_id in final_mapping.items():
+        if mondo_id in assoc_graph or get_harmonizome_data(mondo_id):
+            found += 1
+            # print(f'{snomed_id} - {mondo_id} - {assoc_graph[mondo_id]}')
+    print(f'Found {found} snomed ids with associated genes')
