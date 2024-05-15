@@ -45,7 +45,7 @@ class GeneAssocPhenotype(Base):
 Base.metadata.create_all(engine)
 
 
-def example_add():
+def example_add(session):
     # example test
     new_gene = Gene(entrezid=12345)
     new_disorder = Disorder(mondoid='MONDO:0000001', snomed_id='SNOMED:0000001')
@@ -65,11 +65,7 @@ def example_add():
     session.commit()
 
 
-if __name__ == '__main__':
-    # Define a session
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
+def example_query(session):
     # Querying the database
     results = (session
                .query(Gene, Phenotype)
@@ -81,3 +77,12 @@ if __name__ == '__main__':
         print(
             f"Gene EntrezID: {gene.entrezid}, Phenotype HPOID: {phenotype.hpoid},"
             f" SNOMED ID: {phenotype.snomed_id}, OMIM ID: {phenotype.omim_id}")
+
+
+if __name__ == '__main__':
+    # Define a session
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # example_add(session)
+    example_query(session)

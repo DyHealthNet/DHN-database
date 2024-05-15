@@ -1,5 +1,6 @@
 import os
 import json
+import pandas as pd
 import networkx as nx
 import urllib.request
 from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_ids
@@ -7,9 +8,12 @@ from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_id
 
 def download_hpo_ontology(data_dir: str):
     # find the latest release of the HPO ontology
-    download_link = 'https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2024-04-26/hp.json'
+    mapping_link = 'https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2024-04-26/hp.json'
     download_path = f'{data_dir}/hp.json'
-    urllib.request.urlretrieve(download_link, download_path)
+    urllib.request.urlretrieve(mapping_link, download_path)
+    phenotype_link = 'https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2024-04-26/phenotype.hpoa'
+    download_path = f'{data_dir}/phenotype.hpoa'
+    urllib.request.urlretrieve(phenotype_link, download_path)
 
 
 def read_hpo_ontology(hpo_path: str):
@@ -30,26 +34,55 @@ def ontology_data_to_network(hpo_data: dict):
     return graph
 
 
-if __name__ == '__main__':
-    data_dir = '../data'
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    hpo_path = f'{data_dir}/hp.json'
-    if not os.path.exists(hpo_path):
-        download_hpo_ontology(data_dir)
-    hpo_data = read_hpo_ontology(hpo_path)
-    hpo_graph = ontology_data_to_network(hpo_data)
-    needed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
-    needed_ids = set(needed_ids['snomed_id'].unique())
-    # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
-    available_snomed_ids = set()
+def snomed_from_hpo(hpo_graph, needed_snomed_ids):
+    snomed_ids = {}
     for node in hpo_graph.nodes(data=True):
         xrefs = node[1].get('xrefs', [])
         for xref in xrefs:
             if xref['val'].startswith('SNOMEDCT_US:'):
                 snomed_id = xref['val'].split(':')[-1]
-                available_snomed_ids.add(snomed_id)
+                if snomed_id in needed_snomed_ids:
+                    hpo_id = node[0].split('/')[-1].replace('_', ':')
+                    snomed_ids[snomed_id] = hpo_id
+    return snomed_ids
+
+
+def hpo_to_omim(data_dir, snomed_id_mapping):
+    # read the HPOA file
+    hpoa = pd.read_csv(f'{data_dir}/phenotype.hpoa', sep='\t', comment='#', low_memory=False)
+    # convert the hpoa to a dict with hpo_id as key, database_id as value
+    hpoa_dict = hpoa.set_index('hpo_id')['database_id'].to_dict()
+    # convert the snomed_id_mapping to a dict with snomed_id as key, hpo_id as value
+    snomed_to_omim = {}
+    for key, value in snomed_id_mapping.items():
+        try:
+            snomed_to_omim[key] = hpoa_dict[value]
+        except KeyError:
+            pass
+    return snomed_to_omim
+
+
+if __name__ == '__main__':
+    # data handling
+    data_dir = '../data'
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    needed_files = [f'{data_dir}/hp.json', f'{data_dir}/phenotype.hpoa']
+    if not all([os.path.exists(f) for f in needed_files]):
+        download_hpo_ontology(data_dir)
+
+    # HPO conversion
+    hpo_data = read_hpo_ontology(needed_files[0])
+    hpo_graph = ontology_data_to_network(hpo_data)
+    needed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
+    needed_ids = set(needed_ids['snomed_id'].unique())
+    # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
+    available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
+
+    # convert the snomed ids to OMIM ids
+    snomed_to_omim = hpo_to_omim(data_dir, available_snomed_ids)
+    print(f'Found {len(snomed_to_omim)} snomed ids with OMIM ids')
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
-    print(f'Found {len(needed_ids)} snomed ids in the DyHealthNet data')
-    print(f'Found {len(needed_ids.intersection(available_snomed_ids))} snomed ids in both')
+
+    
 
