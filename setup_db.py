@@ -1,48 +1,14 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import Base, Gene, Disorder, Phenotype, GeneAssocDisorder, GeneAssocPhenotype
 
 # create postrgres db engine in memory
 engine = create_engine("postgresql://postgres:password@172.17.0.2:5432/postgres")
 
-# Create a declarative base
-Base = declarative_base()
 
-
-class Gene(Base):
-    __tablename__ = 'genes'
-    entrezid = Column(Integer, primary_key=True)
-
-
-class Disorder(Base):
-    __tablename__ = 'disorders'
-    mondoid = Column(String, primary_key=True)
-    snomed_id = Column(String)
-
-
-class Phenotype(Base):
-    __tablename__ = 'phenotypes'
-    hpoid = Column(String, primary_key=True)
-    snomed_id = Column(String)
-    omim_id = Column(String)
-
-
-class GeneAssocDisorder(Base):
-    __tablename__ = 'gene_assoc_disorders'
-    id = Column(Integer, primary_key=True)
-    entrezid = Column(Integer, ForeignKey('genes.entrezid'))
-    mondoid = Column(String, ForeignKey('disorders.mondoid'))
-    edge_source = Column(String)
-
-
-class GeneAssocPhenotype(Base):
-    __tablename__ = 'gene_assoc_phenotypes'
-    id = Column(Integer, primary_key=True)
-    entrezid = Column(Integer, ForeignKey('genes.entrezid'))
-    hpoid = Column(String, ForeignKey('phenotypes.hpoid'))
-
-
-# does not recreate tables if they already exist
-Base.metadata.create_all(engine)
+def example_create():
+    # does not recreate tables if they already exist
+    Base.metadata.create_all(engine)
 
 
 def example_add(session):
@@ -84,5 +50,6 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    # example_add(session)
+    example_create()
+    example_add(session)
     example_query(session)
