@@ -1,9 +1,18 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, URL
 from sqlalchemy.orm import sessionmaker
 from models import Base, Gene, Disorder, Phenotype, GeneAssocDisorder, GeneAssocPhenotype
 
 # create postrgres db engine in memory
-engine = create_engine("postgresql://postgres:password@172.17.0.2:5432/postgres")
+url = url_object = URL.create(
+    "postgresql",
+    username="postgres",
+    password="password",  # plain (unescaped) text
+    host="172.17.0.2",
+    port="5432",
+    database="appdb",
+)
+engine = create_engine(url)
+#engine = create_engine("postgresql://postgres:password@172.17.0.2:5432/postgres")
 
 
 def example_create():
