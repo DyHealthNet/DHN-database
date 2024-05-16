@@ -20,7 +20,7 @@ class Disorder(Base):
 class Phenotype(Base):
     __tablename__ = 'phenotypes'
     hpoid = Column(String, primary_key=True)
-    snomed_id = Column(String, notnull=False)
+    snomed_id = Column(String, nullable=True)
     omim_id = Column(String)
     orpha_id = Column(String)
 

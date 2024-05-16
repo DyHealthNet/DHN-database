@@ -161,5 +161,5 @@ if __name__ == '__main__':
     for snomed_id, mondo_id in final_mapping.items():
         if mondo_id in assoc_graph or get_harmonizome_data(mondo_id):
             found += 1
-            # print(f'{snomed_id} - {mondo_id} - {assoc_graph[mondo_id]}')
+            print(f'{snomed_id} - {mondo_id} - {assoc_graph[mondo_id]}')
     print(f'Found {found} snomed ids with associated genes')
