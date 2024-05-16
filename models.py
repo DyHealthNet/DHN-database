@@ -8,7 +8,7 @@ Base = declarative_base()
 
 class Gene(Base):
     __tablename__ = 'genes'
-    entrezid = Column(Integer, primary_key=True)
+    entrezid = Column(String, primary_key=True)
 
 
 class Disorder(Base):
@@ -20,8 +20,9 @@ class Disorder(Base):
 class Phenotype(Base):
     __tablename__ = 'phenotypes'
     hpoid = Column(String, primary_key=True)
-    snomed_id = Column(String)
+    snomed_id = Column(String, notnull=False)
     omim_id = Column(String)
+    orpha_id = Column(String)
 
 
 class GeneAssocDisorder(Base):
