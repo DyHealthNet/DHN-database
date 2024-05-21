@@ -8,8 +8,8 @@ url = url_object = URL.create(
     username="postgres",
     password="password",  # plain (unescaped) text
     host="0.0.0.0",
-    port="5432",
-    database="appdb",
+    port="9000",
+    database="postgres",
 )
 engine = create_engine(url)
 #engine = create_engine("postgresql://postgres:password@172.17.0.2:5432/postgres")
@@ -22,7 +22,7 @@ def example_create():
 
 def example_add(session):
     # example test
-    new_gene = Gene(entrezid=12345)
+    new_gene = Gene(entrezid="12345")
     new_disorder = Disorder(mondoid='MONDO:0000001', snomed_id='SNOMED:0000001')
     new_phenotype = Phenotype(hpoid='HP:0000001', snomed_id='SNOMED:0000002', omim_id='OMIM:0000001')
 
@@ -32,8 +32,8 @@ def example_add(session):
     session.commit()
 
     # Create associations
-    gene_assoc_disorder = GeneAssocDisorder(entrezid=12345, mondoid='MONDO:0000001', edge_source='source1')
-    gene_assoc_phenotype = GeneAssocPhenotype(entrezid=12345, hpoid='HP:0000001')
+    gene_assoc_disorder = GeneAssocDisorder(entrezid="12345", mondoid='MONDO:0000001', edge_source='source1')
+    gene_assoc_phenotype = GeneAssocPhenotype(entrezid="12345", hpoid='HP:0000001')
 
     session.add(gene_assoc_disorder)
     session.add(gene_assoc_phenotype)
@@ -46,7 +46,7 @@ def example_query(session):
                .query(Gene, Phenotype)
                .join(GeneAssocPhenotype, Gene.entrezid == GeneAssocPhenotype.entrezid)
                .join(Phenotype, GeneAssocPhenotype.hpoid == Phenotype.hpoid)
-               .filter(Gene.entrezid == 12345)
+               .filter(Gene.entrezid == "12345")
                .all())
     for gene, phenotype in results:
         print(

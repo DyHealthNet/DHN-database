@@ -28,7 +28,7 @@ class Phenotype(Base):
 class GeneAssocDisorder(Base):
     __tablename__ = 'gene_assoc_disorders'
     id = Column(Integer, primary_key=True)
-    entrezid = Column(Integer, ForeignKey('genes.entrezid'))
+    entrezid = Column(String, ForeignKey('genes.entrezid'))
     mondoid = Column(String, ForeignKey('disorders.mondoid'))
     edge_source = Column(String)
 
@@ -36,6 +36,6 @@ class GeneAssocDisorder(Base):
 class GeneAssocPhenotype(Base):
     __tablename__ = 'gene_assoc_phenotypes'
     id = Column(Integer, primary_key=True)
-    entrezid = Column(Integer, ForeignKey('genes.entrezid'))
+    entrezid = Column(String, ForeignKey('genes.entrezid'))
     hpoid = Column(String, ForeignKey('phenotypes.hpoid'))
 

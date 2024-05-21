@@ -4,10 +4,13 @@ services:
   postgres:
     image: postgres:latest
     ports:
-      - 5432:5432
+      - 9000:5432
     volumes:
       - DHNpostgres:/var/lib/postgresql/data
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=postgres
       - POSTGRES_DB=postgres
+
+volumes:
+  DHNpostgres:
