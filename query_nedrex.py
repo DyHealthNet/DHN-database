@@ -24,9 +24,13 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
     response = requests.get(url)
     try:
         data = response.json()
-    except:
+        source_gene_map = {}
+        for gene_object in data:
+            source = gene_object['source']
+            source_gene_map[source] = gene_object['genes']
+    except TypeError:
         return None
-    return data
+    return source_gene_map
 
 
 # this function should be in another file
@@ -84,6 +88,7 @@ if __name__ == '__main__':
     snomed_to_mondo = domain_id_to_mondo(data)
     assoc_graph = get_all_associations()
     found = 0
+
     # go through all snomed ids and check if they have a mondo id
     for snomed_id in needed_snomed_ids['snomed_id'].unique():
         # check if ; in snomed id and if so, do this for all ids

@@ -28,16 +28,16 @@ class Phenotype(Base):
 class GeneAssocDisorder(Base):
     __tablename__ = 'gene_associates_disorders'
     id = Column(Integer, primary_key=True)
-    entrez_id = Column(String, ForeignKey('genes.entrezid'))
-    mondo_id = Column(String, ForeignKey('disorders.mondoid'))
+    entrez_id = Column(String, ForeignKey('genes.entrez_id'))
+    mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
     edge_source = Column(String)
 
 
 class GeneAssocPhenotype(Base):
     __tablename__ = 'gene_associates_phenotypes'
     id = Column(Integer, primary_key=True)
-    entrez_id = Column(String, ForeignKey('genes.entrezid'))
-    hpo_id = Column(String, ForeignKey('phenotypes.hpoid'))
+    entrez_id = Column(String, ForeignKey('genes.entrez_id'))
+    hpo_id = Column(String, ForeignKey('phenotypes.hpo_id'))
 
 class Protein(Base):
     __tablename__ = 'proteins'
