@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, URL
 from sqlalchemy.orm import sessionmaker
-from models import Base, Gene, Disorder, Phenotype, GeneAssocDisorder, GeneAssocPhenotype
+from models import *
 from query_nedrex import needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_all_associations, \
     get_harmonizome_data
 
@@ -14,9 +14,6 @@ url = url_object = URL.create(
     database="postgres",
 )
 engine = create_engine(url)
-
-
-#engine = create_engine("postgresql://postgres:password@172.17.0.2:5432/postgres")
 
 
 def create_tables():
@@ -59,6 +56,13 @@ def example_query(session):
 
 
 def retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph):
+    """
+    Queries the needed snomed ids and retrieves the associated genes and disorders from NEDRex
+    :param needed_snomed: snomed ids in the dataset
+    :param snomed_to_mondo: map from snomed to mondo ids from nedrex
+    :param assoc_graph: association graph from nedrex of mondo ids to genes
+    :return: list of genes to add, list of disorders to add, list of gene associations to add, number of snomed ids found
+    """
     gene_associations = set()
     genes_to_add = set()
     disorders = set()
@@ -95,8 +99,16 @@ def retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph):
     return genes_to_add, disorders, gene_associations, found
 
 
-def add_items(session, items: iter, column: type[Gene | Phenotype | Disorder | GeneAssocDisorder | GeneAssocPhenotype],
+def add_items(session, items: iter, column: type[Gene | Phenotype | Disorder | GeneAssocDisorder | GeneAssocPhenotype | Protein],
               filter_args: list):
+    """
+    Adds items to the database if they do not already exist
+    :param session: Session object
+    :param items: iterable of items to add
+    :param column: the type of item to add, must be a class from models.py
+    :param filter_args: the attributes to filter by to check if the item already exists
+    :return: None
+    """
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
         exists = session.query(column).filter_by(**filter_values).first()
@@ -110,6 +122,12 @@ def add_items(session, items: iter, column: type[Gene | Phenotype | Disorder | G
 
 
 def add_disorder_data(session, snomed_id_path: str):
+    """
+    Adds disorder data to the database given a path to a file with snomed ids
+    :param session: Database session object
+    :param snomed_id_path: str, path to file with snomed ids
+    :return: None
+    """
     needed_snomed = needed_snomed_ids(snomed_id_path)
     data = get_disorder_data()
     snomed_to_mondo = domain_id_to_mondo(data)
