@@ -54,6 +54,8 @@ def example_query(session):
             f" SNOMED ID: {phenotype.snomed_id}, OMIM ID: {phenotype.omim_id}")
 
 
+
+
 if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
