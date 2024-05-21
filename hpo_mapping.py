@@ -125,6 +125,7 @@ def disorder_to_mondo(disease_data, snomed_to_db) -> dict:
 
 
 if __name__ == '__main__':
+
     # data handling
     data_dir = '../data'
     if not os.path.exists(data_dir):
@@ -132,12 +133,6 @@ if __name__ == '__main__':
     needed_files = [f'{data_dir}/hp.json', f'{data_dir}/phenotype.hpoa']
     if not all([os.path.exists(f) for f in needed_files]):
         download_hpo_ontology(data_dir)
-
-    # HPO conversion: Pathway
-    # HPO data (HPO_ID ----> SNOMED_ID) - look for needed SNOMED IDs
-    # -> map to external database (SNOMED_ID -- HPO_ID --> OMIM_ID/ORPHA_ID)
-    # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
-    # -> get associated genes (SNOMED_ID -- Mondo_ID --> Genes)
 
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)

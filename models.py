@@ -38,6 +38,7 @@ class GeneAssocPhenotype(Base):
     id = Column(Integer, primary_key=True)
     entrez_id = Column(String, ForeignKey('genes.entrez_id'))
     hpo_id = Column(String, ForeignKey('phenotypes.hpo_id'))
+    edge_source = Column(String)
 
 
 class Protein(Base):
