@@ -7,7 +7,7 @@ url = url_object = URL.create(
     "postgresql",
     username="postgres",
     password="password",  # plain (unescaped) text
-    host="172.17.0.2",
+    host="0.0.0.0",
     port="5432",
     database="appdb",
 )
