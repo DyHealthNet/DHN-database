@@ -6,6 +6,7 @@ from query_nedrex import needed_snomed_ids, domain_id_to_mondo, get_disorder_dat
     get_harmonizome_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo, \
     hpo_to_xref, disorder_to_mondo
+from protein_mapping import get_proteinID_neddrex, read_proteinID_chris
 
 # create postrgres db engine in memory
 url = url_object = URL.create(
@@ -22,6 +23,7 @@ engine = create_engine(url)
 def create_tables():
     # does not recreate tables if they already exist
     Base.metadata.create_all(engine)
+
 
 
 def example_add(session):
@@ -238,6 +240,14 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
     add_items(session, gene_associations, GeneAssocPhenotype, ['entrez_id', 'hpo_id'])
     session.commit()
     print(f"Found and successfully added {found} snomed ids with phenotypes to db")
+def add_protein_data(session, proteinData_path):
+    proteinData =  read_proteinID_chris(proteinData_path)
+    proteinGeneDict = {}
+    for proteinID in proteinData:
+        get_proteinID_neddrex(proteinID)[0]['geneName']
+        add_items(session, Protein, proteinID)
+        proteinGeneDict[proteinID] = get_proteinID_neddrex(proteinID)[0]['geneName']
+    add_items(session,proteinGeneDict, Protein)
 
 
 if __name__ == '__main__':
@@ -245,6 +255,11 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     session = Session()
     create_tables()
-    data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    add_disorder_data(session, data_path)
-    add_phenotype_data(session, data_path)
+    #paths
+    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
+    protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
+#    add_disorder_data(session, pheno_data_path)
+ #   add_phenotype_data(session, pheno_data_path)
+  #  add_protein_data(session, protein_data_path)
+
+

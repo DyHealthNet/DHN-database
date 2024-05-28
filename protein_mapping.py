@@ -4,6 +4,9 @@ import pandas as pd
 import networkx as nx
 import urllib.request
 import requests
+import itertools
+
+
 
 def read_proteinID_chris(proteinID_path: str) :
     """
@@ -11,7 +14,7 @@ def read_proteinID_chris(proteinID_path: str) :
     """
     df = pd.read_csv(proteinID_path, sep='\t')
    # print(f"Found {len(df)} proteinIDs with {len(df['UniProt'].unique())} unique ids")
-    return df['UniProt'].unique()
+    #return df['UniProt'].unique()
 
 def get_proteinID_neddrex(proteinID: str):
     """
@@ -33,19 +36,11 @@ def get_proteinID_neddrex(proteinID: str):
 
 
 
+#proteinIDs_CHRIS = read_proteinID_chris("../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt")
 
-
-proteinIDs_CHRIS = read_proteinID_chris("../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt")
-#fetch_gene_names("x0so0034")
-#print(get_proteinID_neddrex("P43320"))
-
-
-for proteinID in proteinIDs_CHRIS:
-    #print(proteinID)
-    print(get_proteinID_neddrex(proteinID))
-
-
-
+#for proteinID in proteinIDs_CHRIS:
+ #   #print(proteinID)
+  #  print(get_proteinID_neddrex(proteinID)[0]['geneName'])
 
 
 
