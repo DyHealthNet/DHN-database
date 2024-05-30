@@ -43,8 +43,7 @@ class GeneAssocPhenotype(Base):
 
 class Protein(Base):
     __tablename__ = 'proteins'
-    id = Column(Integer, primary_key=True)
-    uniprotId = Column(String, primary_key=True)
-    gene = Column(String, ForeignKey('genes.entrez_id'))
+    uniprot_id = Column(String, primary_key=True)
+    #entrez_id = Column(String, ForeignKey('genes.entrez_id'))
 
 

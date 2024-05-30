@@ -14,7 +14,8 @@ def read_proteinID_chris(proteinID_path: str) :
     """
     df = pd.read_csv(proteinID_path, sep='\t')
    # print(f"Found {len(df)} proteinIDs with {len(df['UniProt'].unique())} unique ids")
-    #return df['UniProt'].unique()
+
+    return df['UniProt'].unique()
 
 def get_proteinID_neddrex(proteinID: str):
     """
