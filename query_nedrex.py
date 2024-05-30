@@ -8,7 +8,18 @@ def get_disorder_data() -> dict:
     Fetches all disorder data from nedrex
     :return: dictionary with disorder data
     """
-    url = 'https://api.nedrex.net/disorder/all'
+    url = 'https://api.nedrex.net/open/disorder/all'
+    response = requests.get(url)
+    data = response.json()
+    return data
+
+
+def get_phenotype_data() -> dict:
+    """
+    Fetches all phenotype data from nedrex
+    :return: dictionary with phenotype data
+    """
+    url = 'https://api.nedrex.net/open/phenotype/all'
     response = requests.get(url)
     data = response.json()
     return data
@@ -54,12 +65,12 @@ def domain_id_to_mondo(disorder_data: dict, domain_id: str = 'snomedct') -> dict
     return snomed_to_mondo
 
 
-def get_all_associations() -> nx.Graph:
+def get_edge_associations(edge='gene_associated_with_disorder') -> nx.Graph:
     """
     Fetches all associations from NedRex
     :return: networkx graph with all mondo ids and associated genes
     """
-    url = 'https://api.nedrex.net/open/gene_associated_with_disorder/all'
+    url = f'https://api.nedrex.net/open/{edge}/all'
     response = requests.get(url)
     data = response.json()
     G = nx.Graph()
@@ -86,7 +97,7 @@ if __name__ == '__main__':
     needed_snomed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
     data = get_disorder_data()
     snomed_to_mondo = domain_id_to_mondo(data)
-    assoc_graph = get_all_associations()
+    assoc_graph = get_edge_associations()
     found = 0
 
     # go through all snomed ids and check if they have a mondo id
