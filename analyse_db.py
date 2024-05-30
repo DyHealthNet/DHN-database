@@ -36,7 +36,7 @@ needed_snomed = needed_snomed_ids(data_path)
 #%%
 # create venn diagram of phenotypes that are also disorders
 venn2(subsets=(disorders - len(phenotype_overlap), phenotypes - len(phenotype_overlap), len(phenotype_overlap)),
-      set_labels=('Phenotypes', 'Disorders'))
+      set_labels=('Disorders', 'Phenotypes'))
 plt.savefig('phenotype_disorder_overlap_venn.png')
 plt.show()
 

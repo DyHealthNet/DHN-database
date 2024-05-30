@@ -2,10 +2,10 @@ import os
 from sqlalchemy import create_engine, URL
 from sqlalchemy.orm import sessionmaker
 from models import *
-from query_nedrex import needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_all_associations, \
+from query_nedrex import needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo, \
-    hpo_to_xref, disorder_to_mondo
+    hpo_to_xref, disorder_to_mondo, omim_pathway, pheno_pathway
 from protein_mapping import get_proteinID_neddrex, read_proteinID_chris
 
 # create postrgres db engine in memory
@@ -23,7 +23,6 @@ engine = create_engine(url)
 def create_tables():
     # does not recreate tables if they already exist
     Base.metadata.create_all(engine)
-
 
 
 def example_add(session):
@@ -136,16 +135,19 @@ def retrieve_phenotype_data(needed_snomed, hpo_graph, data_dir):
     phenotypes = set()
     gene_associations = set()
     needed_ids = set(needed_snomed['snomed_id'].unique())
+    assoc_graph = get_edge_associations()
+
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
     available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
-    # convert the snomed ids to OMIM ids
     snomed_to_xref = hpo_to_xref(data_dir, available_snomed_ids)
-    # get the disorder data
-    disorder_data = get_disorder_data()
-    final_mapping = disorder_to_mondo(disorder_data, snomed_to_xref)
+
+    print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
+    found_ids = omim_pathway(available_snomed_ids, data_dir, assoc_graph)
+    found_pheno_ids = pheno_pathway(available_snomed_ids, assoc_graph)
+
+    final_mapping = {**found_ids, **found_pheno_ids}
 
     # find the genes that are associated with the mondo ids
-    assoc_graph = get_all_associations()
     for snomed_id, mondo_id in final_mapping.items():
         genes, source, harm = mondo_in_association_graph(mondo_id, assoc_graph)
         if genes is None:
@@ -204,7 +206,7 @@ def add_disorder_data(session, snomed_id_path: str):
     needed_snomed = needed_snomed_ids(snomed_id_path)
     data = get_disorder_data()
     snomed_to_mondo = domain_id_to_mondo(data)
-    assoc_graph = get_all_associations()
+    assoc_graph = get_edge_associations()
 
     genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph)
 
@@ -233,13 +235,34 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
 
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)
-    genes_to_add, disorders, gene_associations, found = retrieve_phenotype_data(needed_ids, hpo_graph, data_dir)
+    genes_to_add, phenotypes, gene_associations, found = retrieve_phenotype_data(needed_ids, hpo_graph, data_dir)
+
+    # since some phenotypes are subtypes of disorders, we only add phenotypes that are
+    # not already in the disorder database
+    removable_phenotypes = []
+    removable_associations = []
+    removable_genes = []
+
+    for phenotype in phenotypes:
+        if session.query(Disorder).filter_by(snomed_id=phenotype.snomed_id).first() is None:
+            continue
+        # remove phenotypes that are already in the disorder database
+        removable_phenotypes.append(phenotype)
+        removable_associations.extend([x for x in gene_associations if x.hpo_id == phenotype.hpo_id])
+        removable_genes.extend([x for x in genes_to_add if x.entrez_id in [y.entrez_id for y in gene_associations if y.hpo_id == phenotype.hpo_id]])
+
+    phenotypes = phenotypes - set(removable_phenotypes)
+    gene_associations = gene_associations - set(removable_associations)
+    genes_to_add = genes_to_add - set(removable_genes)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
-    add_items(session, disorders, Phenotype, ['hpo_id'])
+    add_items(session, phenotypes, Phenotype, ['hpo_id'])
     add_items(session, gene_associations, GeneAssocPhenotype, ['entrez_id', 'hpo_id'])
+
     session.commit()
     print(f"Found and successfully added {found} snomed ids with phenotypes to db")
+
+
 def add_protein_data(session, proteinData_path):
     proteinData =  read_proteinID_chris(proteinData_path)
     proteinGeneDict = {}
@@ -247,8 +270,7 @@ def add_protein_data(session, proteinData_path):
         get_proteinID_neddrex(proteinID)[0]['geneName']
         add_items(session, Protein, proteinID)
         proteinGeneDict[proteinID] = get_proteinID_neddrex(proteinID)[0]['geneName']
-    if (proteinID != None):
-        add_items(session,proteinGeneDict, Protein)
+    add_items(session,proteinGeneDict, Protein)
 
 
 if __name__ == '__main__':
@@ -256,11 +278,10 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     session = Session()
     create_tables()
-    #paths
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
- #   add_disorder_data(session, pheno_data_path)
+    # add_disorder_data(session, pheno_data_path)
     add_phenotype_data(session, pheno_data_path)
-    add_protein_data(session, protein_data_path)
+    # add_protein_data(session, protein_data_path)
 
 
