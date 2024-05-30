@@ -247,7 +247,8 @@ def add_protein_data(session, proteinData_path):
         get_proteinID_neddrex(proteinID)[0]['geneName']
         add_items(session, Protein, proteinID)
         proteinGeneDict[proteinID] = get_proteinID_neddrex(proteinID)[0]['geneName']
-    add_items(session,proteinGeneDict, Protein)
+    if (proteinID != None):
+        add_items(session,proteinGeneDict, Protein)
 
 
 if __name__ == '__main__':
@@ -258,8 +259,8 @@ if __name__ == '__main__':
     #paths
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-#    add_disorder_data(session, pheno_data_path)
- #   add_phenotype_data(session, pheno_data_path)
-  #  add_protein_data(session, protein_data_path)
+ #   add_disorder_data(session, pheno_data_path)
+    add_phenotype_data(session, pheno_data_path)
+    add_protein_data(session, protein_data_path)
 
 
