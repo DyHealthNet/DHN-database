@@ -6,7 +6,7 @@ import urllib.request
 
 import requests
 
-from query_nedrex import get_disorder_data, domain_id_to_mondo, needed_snomed_ids, get_edge_associations, \
+from query_nedrex import get_disorder_data, domain_id_to_mondo, get_needed_snomed_ids, get_edge_associations, \
     get_harmonizome_data, get_phenotype_data
 
 
@@ -73,6 +73,7 @@ def snomed_from_hpo(hpo_graph, needed_snomed_ids) -> dict:
     :return: mapping from snomed ids to HPO ids
     """
     snomed_ids = {}
+    needed_snomed_ids = set([x.split(".")[1] for x in needed_snomed_ids])
     for node in hpo_graph.nodes(data=True):
         xrefs = node[1].get('xrefs', [])
         for xref in xrefs:
@@ -175,11 +176,12 @@ def omim_pathway(available_snomed_ids, data_dir, assoc_graph):
 def pheno_pathway(available_snomed_ids, assoc_graph):
     # go the phenotype way through nedrex
     # first get the available hpo ids from nedrex
-    phenotype_data = domain_id_to_mondo(get_phenotype_data(), 'hpo')
-    # get the associations between phenotypes and disorders (mondo ids - hpo ids)
+    # phenotype_data = is mapping from hpo ids to mondo ids
     phenotype_assoc_graph = get_edge_associations(edge='disorder_has_phenotype')
     available_snomed_ids = {snomed_id: hpo_id.replace(':', '.').replace('HP', 'hpo') for snomed_id, hpo_id in
                             available_snomed_ids.items()}
+
+    phenotype_data = domain_id_to_mondo(get_phenotype_data(available_snomed_ids), 'hpo')
 
     # map the mondo ids to the phenotype ids
     phenotype_mapping = mondo_to_phenotype(phenotype_data, phenotype_assoc_graph, available_snomed_ids)
@@ -208,14 +210,7 @@ if __name__ == '__main__':
 
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)
-    needed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
-    needed_ids = set(needed_ids['snomed_id'].unique())
-    assoc_graph = get_edge_associations()
+    needed_ids = get_needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
 
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
     available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
-
-    print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
-    found_ids = set(omim_pathway(available_snomed_ids, data_dir, assoc_graph))
-    found_pheno_ids = set(pheno_pathway(available_snomed_ids, assoc_graph))
-    print(f'Ovelapping snomed ids: {len(set(found_ids).intersection(found_pheno_ids))}')

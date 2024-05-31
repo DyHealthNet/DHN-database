@@ -1,28 +1,33 @@
 import requests
 import networkx as nx
 import pandas as pd
+import nedrex
+from nedrex.core import iter_nodes, iter_edges
+from nedrex.core import api_keys_active, get_api_key
 
 
-def get_disorder_data() -> dict:
-    """
-    Fetches all disorder data from nedrex
-    :return: dictionary with disorder data
-    """
-    url = 'https://api.nedrex.net/open/disorder/all'
-    response = requests.get(url)
-    data = response.json()
-    return data
+nedrex.config.set_url_base("https://api.nedrex.net/open/")
+if api_keys_active():
+    api_key = get_api_key(accept_eula=True)
+    nedrex.config.set_api_key(api_key)
 
 
-def get_phenotype_data() -> dict:
+def get_disorder_data(snomedct_ids: set[str]) -> list[dict]:
     """
-    Fetches all phenotype data from nedrex
-    :return: dictionary with phenotype data
+    Fetches disorder data from nedrex for a set of snomedct ids
+    :param snomedct_ids: set of snomedct ids to fetch data for
+    :return: list of dictionaries with disorder data
     """
-    url = 'https://api.nedrex.net/open/phenotype/all'
-    response = requests.get(url)
-    data = response.json()
-    return data
+    return [node for node in iter_nodes('disorder') if any(domain_id in snomedct_ids for domain_id in node['domainIds'])]
+
+
+def get_phenotype_data(snomedct_ids: set[str]) -> list[dict]:
+    """
+    Fetches phenotype data from nedrex for a set of snomedct ids
+    :param snomedct_ids: set of snomedct ids to fetch data for
+    :return: list of dictionaries with phenotype data
+    """
+    return [node for node in iter_nodes('phenotype') if any(domain_id in snomedct_ids for domain_id in node['domainIds'])]
 
 
 def get_harmonizome_data(mondo_id: str) -> dict | None:
@@ -45,7 +50,7 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
 
 
 # this function should be in another file
-def domain_id_to_mondo(disorder_data: dict, domain_id: str = 'snomedct') -> dict:
+def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict:
     """
     Creates a dictionary with snomedct codes as keys and mondo ids as values
     :param disorder_data: dictionary with disorder data from nedrex
@@ -60,48 +65,49 @@ def domain_id_to_mondo(disorder_data: dict, domain_id: str = 'snomedct') -> dict
 
         for domain in disorder['domainIds']:
             if domain.startswith(domain_id):
-                snomed_id = domain.split('.')[1]
-                snomed_to_mondo[snomed_id] = disorder['primaryDomainId']
+                snomed_to_mondo[domain] = disorder['primaryDomainId']
     return snomed_to_mondo
 
 
-def get_edge_associations(edge='gene_associated_with_disorder') -> nx.Graph:
+def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_disorder') -> nx.Graph:
     """
-    Fetches all associations from NedRex
+    Fetches all edges of a certain type that are associated with a set of node ids
+    :param edge_type: type of edge to fetch
+    :param node_ids: set of node ids to fetch edges for (i.e. mondo ids)
     :return: networkx graph with all mondo ids and associated genes
     """
-    url = f'https://api.nedrex.net/open/{edge}/all'
-    response = requests.get(url)
-    data = response.json()
+
+    edges = [e for e in iter_edges(edge_type) if e['sourceDomainId'] in node_ids or e['targetDomainId'] in node_ids]
     G = nx.Graph()
-    types = set()
-    for association in data:
-        G.add_edge(association['sourceDomainId'], association['targetDomainId'])
-        types.add(association['type'])
+    for association in edges:
+        G.add_edge(association['sourceDomainId'], association['targetDomainId'], source=association['dataSources'])
     return G
 
 
 # this function should be in another file
-def needed_snomed_ids(phenotype_path: str):
+def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     """
     Extracts snomed ids from a phenotype file
     :param phenotype_path: path to phenotype file
     :return: dataframe with phenotype data
     """
     df = pd.read_csv(phenotype_path, sep='\t')
-    print(f"Found {len(df)} phenotypes with {len(df['snomed_id'].unique())} unique snomed ids")
-    return df
+    uniqe_snomed = df['snomed_id'].unique()
+    snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in uniqe_snomed] for snomed in sublist]
+    print(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
+    snomeds = set([f"snomedct.{snomed}" for snomed in snomeds if snomed != "nan"])
+    return snomeds
 
 
 if __name__ == '__main__':
-    needed_snomed_ids = needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
-    data = get_disorder_data()
+    needed_snomeds = get_needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
+    data = get_disorder_data(needed_snomeds)
     snomed_to_mondo = domain_id_to_mondo(data)
-    assoc_graph = get_edge_associations()
+    assoc_graph = get_edge_associations(set(snomed_to_mondo.values()))
     found = 0
 
     # go through all snomed ids and check if they have a mondo id
-    for snomed_id in needed_snomed_ids['snomed_id'].unique():
+    for snomed_id in needed_snomeds:
         # check if ; in snomed id and if so, do this for all ids
         snomed_ids = str(snomed_id).split(';')
         for snomed_id in snomed_ids:

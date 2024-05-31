@@ -2,7 +2,7 @@
 from sqlalchemy.orm import sessionmaker
 from setup_db import engine
 from models import Gene, Protein, Phenotype, Disorder
-from query_nedrex import needed_snomed_ids
+from query_nedrex import get_needed_snomed_ids
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn2
 
@@ -31,7 +31,7 @@ print(f"Phenotypes that are also considered disorders: {len(phenotype_overlap)}"
 
 #%%
 data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-needed_snomed = needed_snomed_ids(data_path)
+needed_snomed = get_needed_snomed_ids(data_path)
 
 #%%
 # create venn diagram of phenotypes that are also disorders
