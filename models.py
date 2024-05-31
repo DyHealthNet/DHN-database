@@ -1,6 +1,5 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey
+from sqlalchemy import Column, String, Integer, ForeignKey, ARRAY
 from sqlalchemy.orm import declarative_base
-
 
 # Create a declarative base
 Base = declarative_base()
@@ -19,15 +18,15 @@ class Disorder(Base):
     __tablename__ = 'disorders'
     mondo_id = Column(String, primary_key=True)
     description = Column(String)
-    xrefs = Column(String)  # take from nedrex
+    xrefs = Column(ARRAY(String))  # take from nedrex
 
 
 class Phenotype(Base):
     __tablename__ = 'phenotypes'
     hpo_id = Column(String, primary_key=True)
-    snomed_id = Column(String, nullable=True)
+    display_name = Column(String)
     description = Column(String)
-    xrefs = Column(String)
+    xrefs = Column(ARRAY(String))
     synonyms = Column(String)
 
 
@@ -45,7 +44,7 @@ class Metabolite(Base):
     display_name = Column(String)
     description = Column(String)
     synonyms = Column(String)
-    xrefs = Column(String)
+    xrefs = Column(ARRAY(String))
 
 
 class GeneAssocDisorder(Base):
@@ -85,3 +84,4 @@ class MetaboliteAssocDisorder(Base):
     hmdb_id = Column(String, ForeignKey('metabolites.hmdb_id'))
     mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
     edge_source = Column(String)
+    
