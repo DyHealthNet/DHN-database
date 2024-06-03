@@ -5,6 +5,9 @@ import networkx as nx
 import urllib.request
 import requests
 import itertools
+from query_nedrex import get_disorder_data, domain_id_to_mondo, get_needed_snomed_ids, get_edge_associations, \
+    get_harmonizome_data, get_phenotype_data
+
 
 
 
