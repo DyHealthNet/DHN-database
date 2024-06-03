@@ -10,7 +10,7 @@ class Gene(Base):
     entrez_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
-    synonyms = Column(String)
+    synonyms = Column(ARRAY(String))
     chromosome = Column(String)
 
 
@@ -84,4 +84,3 @@ class MetaboliteAssocDisorder(Base):
     hmdb_id = Column(String, ForeignKey('metabolites.hmdb_id'))
     mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
     edge_source = Column(String)
-    

@@ -1,9 +1,9 @@
 import os
-from sqlalchemy import URL
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
-    get_harmonizome_data
+    get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from protein_mapping import get_proteinID_neddrex, read_proteinID_chris
 
@@ -72,8 +72,8 @@ def mondo_in_association_graph(mondo_id, assoc_graph):
         genes = []
         sources = []
         for edge in assoc_graph.edges(mondo_id, data=True):
-            genes = edge[1]
-            sources = edge[2]['source'][0]
+            genes.append(edge[1])
+            sources.append(edge[2]['source'][0])
     else:
         harm = get_harmonizome_data(mondo_id)
         if harm is None:
@@ -86,9 +86,12 @@ def mondo_in_association_graph(mondo_id, assoc_graph):
     return genes, sources
 
 
-def retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph):
+def retrieve_disorder_data(needed_snomed, snomed_to_mondo, descriptions, xrefs, gene_info, assoc_graph):
     """
     Queries the needed snomed ids and retrieves the associated genes and disorders from NEDRex
+    :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
+    :param xrefs: cross references for the mondo ids to other databases
+    :param descriptions: descriptions for the mondo ids
     :param needed_snomed: snomed ids in the dataset
     :param snomed_to_mondo: map from snomed to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
@@ -103,12 +106,26 @@ def retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph):
         snomed_ids = str(snomed_id).split(';')
         for snomed_id in snomed_ids:
             mondo_id = snomed_to_mondo.get(snomed_id)
+            xref = xrefs.get(mondo_id, None)
+            description = descriptions.get(mondo_id, None)
             genes, sources = mondo_in_association_graph(mondo_id, assoc_graph)
             if genes is None:
                 continue
             # add genes to set
-            genes_to_add.update([Gene(entrez_id=x) for x in genes])
-            disorders.add(Disorder(mondo_id=mondo_id, xrefs=[snomed_id]))
+            for gene in genes:
+                gene_data = gene_info.get(gene, None)
+                if gene_data is None:
+                    new_gene = Gene(entrez_id=gene)
+                    genes_to_add.add(new_gene)
+                    continue
+                new_gene = Gene(entrez_id=gene_data['primaryDomainId'],
+                                display_name=gene_data['displayName'],
+                                description=gene_data['description'],
+                                synonyms=gene_data['synonyms'],
+                                chromosome=gene_data['chromosome'])
+                genes_to_add.add(new_gene)
+
+            disorders.add(Disorder(mondo_id=mondo_id, xrefs=xref, description=description))
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
@@ -117,7 +134,7 @@ def retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph):
     return genes_to_add, disorders, gene_associations, found
 
 
-def retrieve_phenotype_data(needed_snomed, hpo_graph, data_dir):
+def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_dir):
     """
     Retrieve the phenotype data for the needed snomed ids
     # HPO conversion: Pathway
@@ -136,16 +153,22 @@ def retrieve_phenotype_data(needed_snomed, hpo_graph, data_dir):
     gene_associations = set()
     needed_ids = set(needed_snomed)
 
+    available_snomed_ids = available_ids
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
-    available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
 
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
 
     # find the genes that are associated with the mondo ids
     for snomed_id, hpo_id in available_snomed_ids.items():
-        hpo_id = hpo_id.replace(':', '.').replace('HP', 'hpo')
         snomed_id = f"snomedct.{snomed_id}"
-        phenotypes.add(Phenotype(hpo_id=hpo_id, xrefs=[snomed_id]))
+        if additional_data.get(hpo_id, None) is None:
+            continue
+        phenotype_data = additional_data[hpo_id]
+        phenotypes.add(Phenotype(hpo_id=hpo_id,
+                                 xrefs=set(phenotype_data['domainIds'] + [snomed_id]),
+                                 description=phenotype_data['description'],
+                                 synonyms=phenotype_data['synonyms'],
+                                 display_name=phenotype_data['displayName']))
         # add associations to disorders
 
         found += 1
@@ -184,9 +207,19 @@ def add_disorder_data(session, snomed_id_path: str):
     needed_snomed = get_needed_snomed_ids(snomed_id_path)
     data = get_disorder_data(needed_snomed)
     snomed_to_mondo = domain_id_to_mondo(data)
+    data = {x['primaryDomainId']: x for x in data}
+    xrefs = {mondo: data[mondo]['domainIds'] for mondo in snomed_to_mondo.values() if 'domainIds' in data[mondo]}
     assoc_graph = get_edge_associations(set(snomed_to_mondo.values()), edge_type='gene_associated_with_disorder')
+    # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
+    # all associated with the mondo ids
+    gene_info = get_gene_data(set(assoc_graph.nodes))
+    gene_dict = {x['primaryDomainId']: x for x in gene_info}
 
-    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, snomed_to_mondo, assoc_graph)
+    mondo_description = {mondo: data[mondo]['description'] for mondo in snomed_to_mondo.values()}
+
+    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, snomed_to_mondo,
+                                                                               mondo_description, xrefs, gene_dict,
+                                                                               assoc_graph)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
@@ -213,7 +246,16 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
 
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)
-    genes_to_add, phenotypes, gene_associations, _ = retrieve_phenotype_data(needed_ids, hpo_graph, data_dir)
+
+    available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
+
+    #         hpo_id = hpo_id.replace(':', '.').replace('HP', 'hpo')
+    available_snomed_ids = {k: v.replace(':', '.').replace('HP', 'hpo') for k, v in available_snomed_ids.items()}
+    pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
+
+    additional_data = {item['primaryDomainId']: item for item in pheno_data}
+    genes_to_add, phenotypes, gene_associations, _ = retrieve_phenotype_data(needed_ids, available_snomed_ids, additional_data,
+                                                                             data_dir)
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database
@@ -267,5 +309,5 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     # add_disorder_data(session, pheno_data_path)
     add_phenotype_data(session, pheno_data_path)
-    add_protein_data(session, protein_data_path)
+    # add_protein_data(session, protein_data_path)
     # 'primaryDomainId': 'uniprot.P43320', 'domainIds': ['uniprot.P43320'], 'sequence': 'MASDHQTQAGKPQSLNPKIIIFEQENFQGHSHELNGPCPNLKETGVEKAGSVLVQAGPWVGYEQANCKGEQFVFEKGEYPRWDSWTSSRRTDSLSSLRPIKVDSQEHKIILYENPNFTGKKMEIIDDDVPSFHAHGYQEKVSSVRVQSGTWVGYQYPGYRGLQYLLEKGDYKDSSDFGAPHPQVQSVRRIRDMQWHQRGAFHPSN', 'displayName': 'CRBB2_HUMAN', 'synonyms': ['Beta-crystallin B2', 'Beta-B2 crystallin', 'Beta-crystallin Bp'], 'comments': 'FUNCTION: Crystallins are the dominant structural components of the vertebrate eye lens.\nSUBUNIT: Homo/heterodimer, or complexes of higher-order. The structure of beta-crystallin oligomers seems to be stabilized through interactions between the N-terminal arms (By similarity). {ECO:0000250}.\nINTERACTION: Self; NbExp=5; IntAct=EBI-974082, EBI-974082;\nDOMAIN: Has a two-domain beta-structure, folded into four very similar Greek key motifs.\nMASS SPECTROMETRY: Mass=23291; Mass_error=3; Method=Electrospray; Evidence={ECO:0000269|PubMed:8999933};\nMASS SPECTROMETRY: Mass=23289; Method=Electrospray; Evidence={ECO:0000269|PubMed:8175657};\nMASS SPECTROMETRY: Mass=23290; Method=Electrospray; Evidence={ECO:0000269|PubMed:10930324};\nDISEASE: Cataract 3, multiple types (CTRCT3) [MIM:601547]: An opacification of the crystalline lens of the eye that frequently results in visual impairment or blindness. Opacities vary in morphology, are often confined to a portion of the lens, and may be static or progressive. CTRCT3 includes congenital cerulean and sutural cataract with punctate and cerulean opacities, among others. Cerulean cataract is characterized by peripheral bluish and white opacifications organized in concentric layers with occasional central lesions arranged radially. The opacities are observed in the superficial layers of the fetal nucleus as well as the adult nucleus of the lens. Involvement is usually bilateral. Visual acuity is only mildly reduced in childhood. In adulthood, the opacifications may progress, making lens extraction necessary. Histologically the lesions are described as fusiform cavities between lens fibers which contain a deeply staining granular material. Although the lesions may take on various colors, a dull blue is the most common appearance and is responsible for the designation cerulean cataract. Sutural cataract with punctate and cerulean opacities is characterized by white opacification around the anterior and posterior Y sutures, and grayish and bluish, spindle shaped, oval punctate and cerulean opacities of various sizes arranged in lamellar form. The spots are more concentrated towards the peripheral layers and do not delineate the embryonal or fetal nucleus. Phenotypic variation with respect to the size and density of the sutural opacities as well as the number and position of punctate and cerulean spots is observed among affected subjects. {ECO:0000269|PubMed:10634616, ECO:0000269|PubMed:9158139}. Note=The disease is caused by mutations affecting the gene represented in this entry.\nSIMILARITY: Belongs to the beta/gamma-crystallin family. {ECO:0000305}.\nWEB RESOURCE: Name=Eye disease Crystallin, beta-B2 (CRYBB2); Note=Leiden Open Variation Database (LOVD); URL="http://www.lovd.nl/CRYBB2";', 'geneName': 'CRYBB2', 'taxid': 9606, 'type': 'Protein'}]

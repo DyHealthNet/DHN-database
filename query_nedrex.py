@@ -21,13 +21,22 @@ def get_disorder_data(snomedct_ids: set[str]) -> list[dict]:
     return [node for node in iter_nodes('disorder') if any(domain_id in snomedct_ids for domain_id in node['domainIds'])]
 
 
-def get_phenotype_data(snomedct_ids: set[str]) -> list[dict]:
+def get_phenotype_data(hpo_ids: set[str]) -> list[dict]:
     """
     Fetches phenotype data from nedrex for a set of snomedct ids
-    :param snomedct_ids: set of snomedct ids to fetch data for
+    :param hpo_ids: set of snomedct ids to fetch data for
     :return: list of dictionaries with phenotype data
     """
-    return [node for node in iter_nodes('phenotype') if any(domain_id in snomedct_ids for domain_id in node['domainIds'])]
+    return [node for node in iter_nodes('phenotype') if node['primaryDomainId'] in hpo_ids]
+
+
+def get_gene_data(entrez_ids: set[str]) -> list[dict]:
+    """
+    Fetches gene data from nedrex for a set of entrez ids
+    :param entrez_ids: set of entrez ids to fetch data for
+    :return: list of dictionaries with gene data
+    """
+    return [node for node in iter_nodes('gene') if node['primaryDomainId'] in entrez_ids]
 
 
 def get_harmonizome_data(mondo_id: str) -> dict | None:
