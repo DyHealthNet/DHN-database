@@ -139,9 +139,8 @@ def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_
     Retrieve the phenotype data for the needed snomed ids
     # HPO conversion: Pathway
     # HPO data (HPO_ID ----> SNOMED_ID) - look for needed SNOMED IDs
-    # -> map to external database (SNOMED_ID -- HPO_ID --> OMIM_ID/ORPHA_ID)
     # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
-    # -> get associated genes (SNOMED_ID -- Mondo_ID --> Genes)
+    #
 
     :param needed_snomed: set of snomed ids that are needed
     :param hpo_graph: Graph of the HPO ontology
@@ -150,13 +149,16 @@ def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_
     found = 0
     genes_to_add = set()
     phenotypes = set()
-    gene_associations = set()
+    disorder_associations = set()
     needed_ids = set(needed_snomed)
 
     available_snomed_ids = available_ids
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
 
     print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
+
+    # get edge associations for disorder_has_phenotype
+    assoc_graph = get_edge_associations(set(available_snomed_ids.values()), edge_type='disorder_has_phenotype')
 
     # find the genes that are associated with the mondo ids
     for snomed_id, hpo_id in available_snomed_ids.items():
@@ -169,13 +171,22 @@ def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_
                                  description=phenotype_data['description'],
                                  synonyms=phenotype_data['synonyms'],
                                  display_name=phenotype_data['displayName']))
-        # add associations to disorders
+        if hpo_id not in assoc_graph:
+            continue
+        # get the disorder ids associated with the hpo id
+        for edge in assoc_graph.edges(hpo_id, data=True):
+            disorder = edge[1]
+            source = edge[2]['source'][0]
+            new_assoc = DisorderAssocPhenotype(mondo_id=disorder, hpo_id=hpo_id, edge_source=source)
+            disorder_associations.add(new_assoc)
 
         found += 1
-    return genes_to_add, phenotypes, gene_associations, found
+    return genes_to_add, phenotypes, disorder_associations, found
 
 
-def add_items(session, items: iter, column: type[Gene | Phenotype | Disorder | GeneAssocDisorder | GeneAssocPhenotype | Protein],
+def add_items(session, items: iter,
+              column: type[
+                  Gene | Phenotype | Disorder | GeneAssocDisorder | DisorderAssocPhenotype | Protein | Metabolite],
               filter_args: list):
     """
     Adds items to the database if they do not already exist
@@ -254,70 +265,73 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
     pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
 
     additional_data = {item['primaryDomainId']: item for item in pheno_data}
-    genes_to_add, phenotypes, gene_associations, _ = retrieve_phenotype_data(needed_ids, available_snomed_ids, additional_data,
-                                                                             data_dir)
+    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(needed_ids, available_snomed_ids,
+                                                                                 additional_data,
+                                                                                 data_dir)
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database
     removable_phenotypes = []
+    removable_associations = []
 
     for phenotype in phenotypes:
         snomed = [x for x in phenotype.xrefs if 'snomedct' in x][0]
         items_disorder = session.query(Disorder).filter(Disorder.xrefs.any(snomed)).first()
         if not items_disorder:
             continue
-        # remove phenotypes that are already in the disorder database
         removable_phenotypes.append(phenotype)
 
-    print(f"Removing {len(removable_phenotypes)} phenotypes that are already in the disorder database")
+    # also remove associations to phenotypes that are not in the disorder table
+    for assoc in disorder_associations:
+        if assoc.hpo_id in [x.hpo_id for x in removable_phenotypes]:
+            removable_associations.append(assoc)
+        if session.query(Disorder).filter_by(mondo_id=assoc.mondo_id).first() is None:
+            removable_associations.append(assoc)
+
+    print(f"Removing {len(removable_phenotypes)} phenotypes and {len(removable_associations)} associations that are "
+          f"already in the disorder database")
     phenotypes = phenotypes - set(removable_phenotypes)
+    disorder_associations = disorder_associations - set(removable_associations)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, phenotypes, Phenotype, ['hpo_id'])
-    add_items(session, gene_associations, GeneAssocPhenotype, ['entrez_id', 'hpo_id'])
+    add_items(session, disorder_associations, DisorderAssocPhenotype, ['mondo_id', 'hpo_id'])
 
     session.commit()
     print(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
 def add_protein_data(session, proteinData_path):
-    proteinData =  read_proteinID_chris(proteinData_path)
+    proteinData = read_proteinID_chris(proteinData_path)
     neddrexProteins = []
+    counter = 0
     for proteinID in proteinData:
-        #print(proteinID)
-        try:
-            proteinEntry =get_proteinID_neddrex(proteinID)[0]
-            gene_entrez_id =proteinEntry['geneName']
-            protein_sequence = proteinEntry['sequence']
-            protein_description = proteinEntry['comments']
-            #print(gene_entrez_id, proteinID)
-            if not session.query(Gene).filter_by(entrez_id=gene_entrez_id).first():
-                # Add the missing gene to the database
-                print("This gene is not inside the DB:"  + gene_entrez_id +"protID" + proteinID)
-                new_gene = Gene(entrez_id=gene_entrez_id)
-                session.add(new_gene)
-            session.commit()
-            newProtein = Protein(uniprot_id=proteinID, gene_entrez_id=gene_entrez_id, sequence=protein_sequence,description=protein_description)# what to do if the id doesnt exist in gene? should i create a new gene?
-            neddrexProteins.append(newProtein)
-            #get_proteinID_neddrex(proteinID)[0]['geneName']
-
-        except:
-            print("something happend")
+        print(proteinID)
+        if counter == 1:
+            break
+        entrez_id = get_proteinID_neddrex(proteinID)[0]['geneName']
+        print(entrez_id, proteinID)
+        newProtein = Protein(
+            uniprot_id=proteinID)  #entrez_id = entrez_id, what to do if the id doesnt exist in gene? should i create a new gene?
+        neddrexProteins.append(newProtein)
+        #get_proteinID_neddrex(proteinID)[0]['geneName']
+        counter += 1
     #print(*neddrexProteins)
     add_items(session, neddrexProteins, Protein, ['uniprot_id'])
     session.commit()
-   # add_items(session, genes_to_add, Gene, ['entrez_id'])
+
+
+# add_items(session, genes_to_add, Gene, ['entrez_id'])
 
 
 if __name__ == '__main__':
     # Define a session
-
     Session = sessionmaker(bind=engine)
     session = Session()
     create_tables()
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    add_disorder_data(session, pheno_data_path)
+    # add_disorder_data(session, pheno_data_path)
     add_phenotype_data(session, pheno_data_path)
     add_protein_data(session, protein_data_path)
     # 'primaryDomainId': 'uniprot.P43320', 'domainIds': ['uniprot.P43320'], 'sequence': 'MASDHQTQAGKPQSLNPKIIIFEQENFQGHSHELNGPCPNLKETGVEKAGSVLVQAGPWVGYEQANCKGEQFVFEKGEYPRWDSWTSSRRTDSLSSLRPIKVDSQEHKIILYENPNFTGKKMEIIDDDVPSFHAHGYQEKVSSVRVQSGTWVGYQYPGYRGLQYLLEKGDYKDSSDFGAPHPQVQSVRRIRDMQWHQRGAFHPSN', 'displayName': 'CRBB2_HUMAN', 'synonyms': ['Beta-crystallin B2', 'Beta-B2 crystallin', 'Beta-crystallin Bp'], 'comments': 'FUNCTION: Crystallins are the dominant structural components of the vertebrate eye lens.\nSUBUNIT: Homo/heterodimer, or complexes of higher-order. The structure of beta-crystallin oligomers seems to be stabilized through interactions between the N-terminal arms (By similarity). {ECO:0000250}.\nINTERACTION: Self; NbExp=5; IntAct=EBI-974082, EBI-974082;\nDOMAIN: Has a two-domain beta-structure, folded into four very similar Greek key motifs.\nMASS SPECTROMETRY: Mass=23291; Mass_error=3; Method=Electrospray; Evidence={ECO:0000269|PubMed:8999933};\nMASS SPECTROMETRY: Mass=23289; Method=Electrospray; Evidence={ECO:0000269|PubMed:8175657};\nMASS SPECTROMETRY: Mass=23290; Method=Electrospray; Evidence={ECO:0000269|PubMed:10930324};\nDISEASE: Cataract 3, multiple types (CTRCT3) [MIM:601547]: An opacification of the crystalline lens of the eye that frequently results in visual impairment or blindness. Opacities vary in morphology, are often confined to a portion of the lens, and may be static or progressive. CTRCT3 includes congenital cerulean and sutural cataract with punctate and cerulean opacities, among others. Cerulean cataract is characterized by peripheral bluish and white opacifications organized in concentric layers with occasional central lesions arranged radially. The opacities are observed in the superficial layers of the fetal nucleus as well as the adult nucleus of the lens. Involvement is usually bilateral. Visual acuity is only mildly reduced in childhood. In adulthood, the opacifications may progress, making lens extraction necessary. Histologically the lesions are described as fusiform cavities between lens fibers which contain a deeply staining granular material. Although the lesions may take on various colors, a dull blue is the most common appearance and is responsible for the designation cerulean cataract. Sutural cataract with punctate and cerulean opacities is characterized by white opacification around the anterior and posterior Y sutures, and grayish and bluish, spindle shaped, oval punctate and cerulean opacities of various sizes arranged in lamellar form. The spots are more concentrated towards the peripheral layers and do not delineate the embryonal or fetal nucleus. Phenotypic variation with respect to the size and density of the sutural opacities as well as the number and position of punctate and cerulean spots is observed among affected subjects. {ECO:0000269|PubMed:10634616, ECO:0000269|PubMed:9158139}. Note=The disease is caused by mutations affecting the gene represented in this entry.\nSIMILARITY: Belongs to the beta/gamma-crystallin family. {ECO:0000305}.\nWEB RESOURCE: Name=Eye disease Crystallin, beta-B2 (CRYBB2); Note=Leiden Open Variation Database (LOVD); URL="http://www.lovd.nl/CRYBB2";', 'geneName': 'CRYBB2', 'taxid': 9606, 'type': 'Protein'}]
