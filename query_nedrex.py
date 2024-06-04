@@ -59,7 +59,7 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
 
 
 # this function should be in another file
-def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict:
+def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict[str, str]:
     """
     Creates a dictionary with snomedct codes as keys and mondo ids as values
     :param disorder_data: dictionary with disorder data from nedrex

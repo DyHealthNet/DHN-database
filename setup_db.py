@@ -1,6 +1,8 @@
 import os
+
+import networkx as nx
 from sqlalchemy import URL, create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
@@ -24,32 +26,11 @@ def create_tables():
     Base.metadata.create_all(engine)
 
 
-def example_add(session):
-    # example test
-    new_gene = Gene(entrez_id="12345")
-    new_disorder = Disorder(mondo_id='MONDO:0000001', snomed_id='SNOMED:0000001')
-    new_phenotype = Phenotype(hpo_id='HP:0000001', snomed_id='SNOMED:0000002', omim_id='OMIM:0000001')
-
-    session.add(new_gene)
-    session.add(new_disorder)
-    session.add(new_phenotype)
-    session.commit()
-
-    # Create associations
-    gene_assoc_disorder = GeneAssocDisorder(entrez_id="12345", mondo_id='MONDO:0000001', edge_source='source1')
-    gene_assoc_phenotype = GeneAssocPhenotype(entrez_id="12345", hpo_id='HP:0000001')
-
-    session.add(gene_assoc_disorder)
-    session.add(gene_assoc_phenotype)
-    session.commit()
-
-
 def example_query(session):
     # Querying the database
     results = (session
                .query(Gene, Phenotype)
-               .join(GeneAssocPhenotype, Gene.entrez_id == GeneAssocPhenotype.entrez_id)
-               .join(Phenotype, GeneAssocPhenotype.hpo_id == Phenotype.hpo_id)
+               .join(GeneAssocDisorder, Gene.entrez_id == GeneAssocDisorder.entrez_id)
                .filter(Gene.entrez_id == "12345")
                .all())
     for gene, phenotype in results:
@@ -58,14 +39,13 @@ def example_query(session):
             f" SNOMED ID: {phenotype.snomed_id}, OMIM ID: {phenotype.omim_id}")
 
 
-def mondo_in_association_graph(mondo_id, assoc_graph):
+def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[list[str], list[str]] | tuple[None, None]:
     """
     Retrieves the genes associated with a mondo id from the association graph
     :param mondo_id: A mondo id, can be None
     :param assoc_graph: The association graph from NEDRex
     :return: genes associated with the mondo id, source of the data, harmonizome data if not in the association graph
     """
-    harm = None
     if mondo_id is None:
         return None, None
     if mondo_id in assoc_graph:
@@ -86,7 +66,8 @@ def mondo_in_association_graph(mondo_id, assoc_graph):
     return genes, sources
 
 
-def retrieve_disorder_data(needed_snomed, snomed_to_mondo, descriptions, xrefs, gene_info, assoc_graph):
+def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
+                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph) -> tuple[set, set, set, int]:
     """
     Queries the needed snomed ids and retrieves the associated genes and disorders from NEDRex
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
@@ -101,9 +82,9 @@ def retrieve_disorder_data(needed_snomed, snomed_to_mondo, descriptions, xrefs, 
     genes_to_add = set()
     disorders = set()
     found = 0
-    for snomed_id in needed_snomed:
+    for snomed in needed_snomed:
         # check if ; in snomed id and if so, do this for all ids
-        snomed_ids = str(snomed_id).split(';')
+        snomed_ids = str(snomed).split(';')
         for snomed_id in snomed_ids:
             mondo_id = snomed_to_mondo.get(snomed_id)
             xref = xrefs.get(mondo_id, None)
@@ -134,7 +115,7 @@ def retrieve_disorder_data(needed_snomed, snomed_to_mondo, descriptions, xrefs, 
     return genes_to_add, disorders, gene_associations, found
 
 
-def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_dir):
+def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
     """
     Retrieve the phenotype data for the needed snomed ids
     # HPO conversion: Pathway
@@ -142,15 +123,14 @@ def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_
     # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
     #
 
-    :param needed_snomed: set of snomed ids that are needed
-    :param hpo_graph: Graph of the HPO ontology
+    :param additional_data: dictionary with additional data for the hpo ids, must be a dictionary with hpo ids as keys
+    :param available_ids: dictionary with snomed ids as keys and hpo ids as values
     :return: dictionary with the phenotype data
     """
     found = 0
     genes_to_add = set()
     phenotypes = set()
     disorder_associations = set()
-    needed_ids = set(needed_snomed)
 
     available_snomed_ids = available_ids
     # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
@@ -184,10 +164,7 @@ def retrieve_phenotype_data(needed_snomed, available_ids, additional_data, data_
     return genes_to_add, phenotypes, disorder_associations, found
 
 
-def add_items(session, items: iter,
-              column: type[
-                  Gene | Phenotype | Disorder | GeneAssocDisorder | DisorderAssocPhenotype | Protein | Metabolite],
-              filter_args: list):
+def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: list):
     """
     Adds items to the database if they do not already exist
     :param session: Session object
@@ -265,9 +242,7 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
     pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
 
     additional_data = {item['primaryDomainId']: item for item in pheno_data}
-    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(needed_ids, available_snomed_ids,
-                                                                                 additional_data,
-                                                                                 data_dir)
+    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_snomed_ids, additional_data)
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database

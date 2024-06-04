@@ -153,26 +153,6 @@ def mondo_to_phenotype(pheno_data, assoc_graph, snomed_hpo_map) -> dict:
     return mondo_to_pheno
 
 
-def omim_pathway(available_snomed_ids, data_dir, assoc_graph):
-    # convert the snomed ids to OMIM ids
-    snomed_to_xref = hpo_to_xref(data_dir, available_snomed_ids)
-    print(f'Found {len(snomed_to_xref)} snomed ids with OMIM/ORPHA ids')
-
-    # get the disorder data
-    disorder_data = get_disorder_data()
-    final_mapping = disorder_to_mondo(disorder_data, snomed_to_xref)
-    print(f'Found {len(final_mapping)} snomed ids with Mondo ids')
-    # find the genes that are associated with the mondo ids
-    found = 0
-    found_ids = {}
-    for snomed_id, mondo_id in final_mapping.items():
-        if mondo_id in assoc_graph or get_harmonizome_data(mondo_id):
-            found += 1
-            found_ids[snomed_id] = mondo_id
-    print(f'Found {found} snomed ids with associated genes')
-    return found_ids
-
-
 def pheno_pathway(available_snomed_ids, assoc_graph):
     # go the phenotype way through nedrex
     # first get the available hpo ids from nedrex
