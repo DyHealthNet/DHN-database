@@ -53,7 +53,8 @@ def get_edge_associations2(node_ids: set[str], edge_type) -> nx.Graph:
     if(edge_type == "protein_interacts_with_protein"):
         sourceDomainId = "memberOne"
         targetDomainId = "memberTwo"
-    edges = [e for e in iter_edges(edge_type) if e[sourceDomainId] in node_ids or e[targetDomainId] in node_ids]
+    edges = iter_edges(edge_type)
+    #edges = [e for e in iter_edges(edge_type) if e[sourceDomainId] in node_ids or e[targetDomainId] in node_ids]
     G = nx.Graph()
     for association in edges:
         G.add_edge(association[sourceDomainId], association[targetDomainId], source=association['dataSources'])
