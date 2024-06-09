@@ -41,7 +41,9 @@ def get_proteinID_neddrex(proteinID: str):
 
 
 
-def get_edge_associations2(node_ids: set[str], edge_type) -> nx.Graph:
+def get_edge_associations2(node_ids: set[str], edge_type):
+
+
     """
     Fetches all edges of a certain type that are associated with a set of node ids
     :param edge_type: type of edge to fetch
@@ -53,12 +55,32 @@ def get_edge_associations2(node_ids: set[str], edge_type) -> nx.Graph:
     if(edge_type == "protein_interacts_with_protein"):
         sourceDomainId = "memberOne"
         targetDomainId = "memberTwo"
-    edges = iter_edges(edge_type)
+
+        edges = [e for e in iter_edges(edge_type) if e['memberOne'] in node_ids or e['memberTwo'] in node_ids]
+        G = nx.Graph()
+        for association in edges:
+            G.add_edge(association['memberOne'], association['memberTwo'], source=association['dataSources'])
+        return G
+
+
+
+    #edgesGenerator = iter_edges(edge_type)
+    #testdict = dict(edgesGenerator)
+    #test =2
+    #nodeGenerator = iter_nodes("Proteins")
+   # test = [for node_ids in iter_edges]
+    #filter(edges)
     #edges = [e for e in iter_edges(edge_type) if e[sourceDomainId] in node_ids or e[targetDomainId] in node_ids]
-    G = nx.Graph()
-    for association in edges:
-        G.add_edge(association[sourceDomainId], association[targetDomainId], source=association['dataSources'])
-    return G
+    #G = nx.Graph()
+   # for association in edges:
+    #    G.add_edge(association[sourceDomainId], association[targetDomainId], source=association['dataSources'])
+    filtered_edges = []
+    for edge in edgesGenerator:
+        # Check if either the source or target node ID of the edge is in the node_ids set
+        if edge[sourceDomainId] in node_ids or edge[targetDomainId] in node_ids:
+            # If so, add the edge to the filtered list
+            filtered_edges.append(edge)
+    return edgesGenerator
 
 
 
@@ -70,24 +92,34 @@ def add_proteinSet_data(session, protein_data_path):
                             "protein_in_pathway",
                             "protein_interacts_with_protein",
                             "protein_similarity_protein"]
-    protein_encoded_by_graph = get_edge_associations2(node_ids=proteinSet, edge_type='protein_interacts_with_protein')
-    for edge in protein_encoded_by_graph:
-        protein = edge[1]
-        source = edge[2]['source'][0] #frage hier ist das eigentlichj das Objekt Protein mit den Attributen und ich kann hier sequence fetchen?
-        newProt = Protein()
-
-    #disorder_associations.add(new_assoc)
 
 
+def retrieve_interacting_proteins_neo4j(protein_ids):
+    # Constructing a string of protein IDs for the Cypher query
+    protein_id_string = ', '.join([f'"{protein_id}"' for protein_id in protein_ids])
+    #P04049
+    query= f"""
+    MATCH (p1:Protein)-[:ProteinInteractsWithProtein]->(p2:Protein)
+    WHERE p1.primaryDomainId IN [{protein_id_string}] AND p2.primaryDomainId IN [{protein_id_string}]
+    RETURN p1.primaryDomainId, p2.primaryDomainId
+    """
+
+    #query = "MATCH (n) RETURN n LIMIT 2500"
+    print(query)
+    #url = "http://nedrex-api.zbh.uni-hamburg.de/neo4j/query"
+    #url = "http://82.148.225.92:8022/neo4j/query"
+    url = "https://api.nedrex.net/neo4j/query"
+    response = requests.get(url, params={"query":query}, stream=True)
+    #print("response")
+    for line in response.iter_lines():
+        print("response")
+        print(json.loads(line.decode()))
 
 
-#proteinIDs_CHRIS = read_proteinID_chris("../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt")
 
-#for proteinID in proteinIDs_CHRIS:
- #   #print(proteinID)
-  #  print(get_proteinID_neddrex(proteinID)[0]['geneName'])
 
-["is_isoform_of","molecule_similarity_molecule","protein_encoded_by","protein_has_signature","protein_in_pathway","protein_interacts_with_protein","protein_similarity_protein"]
+ 
+#["is_isoform_of","molecule_similarity_molecule","protein_encoded_by","protein_has_signature","protein_in_pathway","protein_interacts_with_protein","protein_similarity_protein"]
 
 
 
@@ -108,3 +140,14 @@ def add_proteinSet_data(session, protein_data_path):
   "protein",
   "signature"
 ]
+
+
+
+import json
+import requests
+def testneo4j():
+    query = "MATCH (n) RETURN n LIMIT 25"
+    url = "http://nedrex-api.zbh.uni-hamburg.de/neo4j/query"
+    response = requests.get(url, params={"query":query}, stream=True)
+    for line in response.iter_lines():
+        print(json.loads(line.decode()))
