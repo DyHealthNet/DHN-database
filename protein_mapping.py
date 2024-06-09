@@ -99,15 +99,10 @@ def retrieve_interacting_proteins_neo4j(protein_ids):
     protein_id_string = ', '.join([f'"{protein_id}"' for protein_id in protein_ids])
     #P04049
     query= f"""
-    MATCH (p1:Protein)-[:ProteinInteractsWithProtein]->(p2:Protein)
+    MATCH (p1:Protein)-[r]->(p2:Protein)
     WHERE p1.primaryDomainId IN [{protein_id_string}] AND p2.primaryDomainId IN [{protein_id_string}]
-    RETURN p1.primaryDomainId, p2.primaryDomainId
+    RETURN p1.primaryDomainId, p2.primaryDomainId, r
     """
-
-    #query = "MATCH (n) RETURN n LIMIT 2500"
-    print(query)
-    #url = "http://nedrex-api.zbh.uni-hamburg.de/neo4j/query"
-    #url = "http://82.148.225.92:8022/neo4j/query"
     url = "https://api.nedrex.net/neo4j/query"
     response = requests.get(url, params={"query":query}, stream=True)
     #print("response")
