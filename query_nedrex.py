@@ -78,18 +78,26 @@ def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict
     return snomed_to_mondo
 
 
-def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_disorder') -> nx.Graph:
+def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_disorder', direction='directed') -> nx.Graph:
     """
     Fetches all edges of a certain type that are associated with a set of node ids
     :param edge_type: type of edge to fetch
     :param node_ids: set of node ids to fetch edges for (i.e. mondo ids)
     :return: networkx graph with all mondo ids and associated genes
     """
+    if direction == 'directed':
+        first_node = 'sourceDomainId'
+        second_node = 'targetDomainId'
+    elif direction == 'undirected':
+        first_node = 'memberOne'
+        second_node = 'memberTwo'
+    else:
+        raise ValueError(f"Direction {direction} not supported")
 
-    edges = [e for e in iter_edges(edge_type) if e['sourceDomainId'] in node_ids or e['targetDomainId'] in node_ids]
+    edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
     G = nx.Graph()
     for association in edges:
-        G.add_edge(association['sourceDomainId'], association['targetDomainId'], source=association['dataSources'])
+        G.add_edge(association[first_node], association[second_node], source=association['dataSources'])
     return G
 
 
