@@ -20,7 +20,7 @@ def read_proteinID_chris(proteinID_path: str) :
     df = pd.read_csv(proteinID_path, sep='\t')
    # print(f"Found {len(df)} proteinIDs with {len(df['UniProt'].unique())} unique ids")
 
-    return df['UniProt'].unique()
+    return df['UniProt'][1:5].unique()
 
 
 def get_proteinID_neddrex(proteinID: str):
@@ -147,10 +147,3 @@ def testneo4j():
     response = requests.get(url, params={"query":query}, stream=True)
     for line in response.iter_lines():
         print(json.loads(line.decode()))
-
-
-proteins = read_proteinID_chris('../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt')
-protein_ids = set(proteins)
-protein_ids = {f"uniprot.{x}" for x in protein_ids}
-print("Getting interactions")
-retrieve_interacting_proteins_neo4j(protein_ids)
