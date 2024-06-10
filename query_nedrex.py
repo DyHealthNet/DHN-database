@@ -81,6 +81,7 @@ def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict
 def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_disorder', direction='directed') -> nx.Graph:
     """
     Fetches all edges of a certain type that are associated with a set of node ids
+    :param direction: The direction of the edges to fetch, either 'directed' or 'undirected'
     :param edge_type: type of edge to fetch
     :param node_ids: set of node ids to fetch edges for (i.e. mondo ids)
     :return: networkx graph with all mondo ids and associated genes

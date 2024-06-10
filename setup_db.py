@@ -3,12 +3,16 @@ import os
 import networkx as nx
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
+from metabolite_mapping import read_metabolite_mapping, read_hmdb_data
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import get_proteinID_neddrex, read_proteinID_chris, add_proteinSet_data, retrieve_interacting_proteins_neo4j
+from protein_mapping import get_proteinID_neddrex, read_proteinID_chris, add_proteinSet_data, \
+    retrieve_interacting_proteins_neo4j
 from nedrex.core import get_collection_attributes
+
 # create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
@@ -296,7 +300,62 @@ def add_protein_data(session, proteinData_path):
     session.commit()
 
 
-# add_items(session, genes_to_add, Gene, ['entrez_id'])
+def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
+    hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
+    metabolite_mapping = read_metabolite_mapping(metabolite_path)
+    unique_metabolites = set()
+
+    # split metabolites that have ; in them
+    for metabolite in metabolite_mapping['hmdb_id'].dropna():
+        unique_metabolites.update(metabolite.split(';'))
+
+    print(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
+
+    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites)
+    print(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
+          f"{len(unique_metabolites)} metabolites in the mapping file.")
+
+    omim_diseases = set()
+    for metabolite in hmdb_mapping:
+        omim_diseases.update(hmdb_mapping[metabolite]['diseases'])
+    omim_diseases = {f"omim.{x}" for x in omim_diseases}
+    disease_data = get_disorder_data(omim_diseases)
+    omim_mapping = domain_id_to_mondo(disease_data, 'omim')
+
+    metabolites = []
+    metabolite_protein_associations = []
+    metabolite_disease_associations = []
+
+    for metabolite in hmdb_mapping:
+        metabolite_name = f"hmdb.{metabolite}"
+        # check if metabolite is in the db already and if so, skip
+        exists = session.query(Metabolite).filter_by(hmdb_id=metabolite_name).first()
+        # if exists is not None:
+        #    continue
+        metabolites.append(Metabolite(hmdb_id=metabolite_name, display_name=hmdb_mapping[metabolite]['display_name'],
+                                      description=hmdb_mapping[metabolite]['description'],
+                                      synonyms=hmdb_mapping[metabolite]['synonyms'],
+                                      xrefs=hmdb_mapping[metabolite]['xrefs'], ))
+
+        for protein in hmdb_mapping[metabolite]['proteins']:
+            # check if the protein is in the db, if it is not, skip
+            if session.query(Protein).filter_by(uniprot_id=protein).first() is None:
+                continue
+            metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
+
+        for disease in hmdb_mapping[metabolite]['diseases']:
+            if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
+                continue
+            metabolite_disease_associations.append(MetaboliteAssocDisorder(hmdb_id=metabolite_name,
+                                                                           mondo_id=omim_mapping[f"omim.{disease}"]))
+
+    print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
+          f"as well as {len(metabolite_protein_associations)} protein associations and "
+          f"{len(metabolite_disease_associations)} disease associations.")
+    add_items(session, metabolites, Metabolite, ['hmdb_id'])
+    add_items(session, metabolite_protein_associations, ProteinAssocMetabolite, ['hmdb_id', 'uniprot_id'])
+    add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
+    session.commit()
 
 
 if __name__ == '__main__':
@@ -306,23 +365,11 @@ if __name__ == '__main__':
     create_tables()
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    #add_protein_data(session, protein_data_path)
-    test = 0
-    protein1 = Protein(uniprot_id= "uniprot.P04049")
-    protein2 = Protein(uniprot_id = "uniprot.P51814")
-    protein3 = Protein(uniprot_id = "uniprot.P19419")
-    preoteinIds = ["uniprot.P04049", "uniprot.P51814", "uniprot.P19419", "uniprot.P43080", "uniprot.P62258", "uniprot.Q64279"]
-    proteinSet = set([protein1, protein2, protein3])
-    retrieve_interacting_proteins_neo4j(preoteinIds)
-
-
-
+    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
 
     # add_disorder_data(session, pheno_data_path)
-    #add_phenotype_data(session, pheno_data_path)
-    #add_proteinSet_data(session, protein_data_path)
-    #print(get_collection_attributes("protein_interacts_with_protein", include_counts=True))
-    #print(testneo4j)
-    # 'primaryDomainId': 'uniprot.P43320', 'domainIds': ['uniprot.P43320'], 'sequence': 'MASDHQTQAGKPQSLNPKIIIFEQENFQGHSHELNGPCPNLKETGVEKAGSVLVQAGPWVGYEQANCKGEQFVFEKGEYPRWDSWTSSRRTDSLSSLRPIKVDSQEHKIILYENPNFTGKKMEIIDDDVPSFHAHGYQEKVSSVRVQSGTWVGYQYPGYRGLQYLLEKGDYKDSSDFGAPHPQVQSVRRIRDMQWHQRGAFHPSN', 'displayName': 'CRBB2_HUMAN', 'synonyms': ['Beta-crystallin B2', 'Beta-B2 crystallin', 'Beta-crystallin Bp'], 'comments': 'FUNCTION: Crystallins are the dominant structural components of the vertebrate eye lens.\nSUBUNIT: Homo/heterodimer, or complexes of higher-order. The structure of beta-crystallin oligomers seems to be stabilized through interactions between the N-terminal arms (By similarity). {ECO:0000250}.\nINTERACTION: Self; NbExp=5; IntAct=EBI-974082, EBI-974082;\nDOMAIN: Has a two-domain beta-structure, folded into four very similar Greek key motifs.\nMASS SPECTROMETRY: Mass=23291; Mass_error=3; Method=Electrospray; Evidence={ECO:0000269|PubMed:8999933};\nMASS SPECTROMETRY: Mass=23289; Method=Electrospray; Evidence={ECO:0000269|PubMed:8175657};\nMASS SPECTROMETRY: Mass=23290; Method=Electrospray; Evidence={ECO:0000269|PubMed:10930324};\nDISEASE: Cataract 3, multiple types (CTRCT3) [MIM:601547]: An opacification of the crystalline lens of the eye that frequently results in visual impairment or blindness. Opacities vary in morphology, are often confined to a portion of the lens, and may be static or progressive. CTRCT3 includes congenital cerulean and sutural cataract with punctate and cerulean opacities, among others. Cerulean cataract is characterized by peripheral bluish and white opacifications organized in concentric layers with occasional central lesions arranged radially. The opacities are observed in the superficial layers of the fetal nucleus as well as the adult nucleus of the lens. Involvement is usually bilateral. Visual acuity is only mildly reduced in childhood. In adulthood, the opacifications may progress, making lens extraction necessary. Histologically the lesions are described as fusiform cavities between lens fibers which contain a deeply staining granular material. Although the lesions may take on various colors, a dull blue is the most common appearance and is responsible for the designation cerulean cataract. Sutural cataract with punctate and cerulean opacities is characterized by white opacification around the anterior and posterior Y sutures, and grayish and bluish, spindle shaped, oval punctate and cerulean opacities of various sizes arranged in lamellar form. The spots are more concentrated towards the peripheral layers and do not delineate the embryonal or fetal nucleus. Phenotypic variation with respect to the size and density of the sutural opacities as well as the number and position of punctate and cerulean spots is observed among affected subjects. {ECO:0000269|PubMed:10634616, ECO:0000269|PubMed:9158139}. Note=The disease is caused by mutations affecting the gene represented in this entry.\nSIMILARITY: Belongs to the beta/gamma-crystallin family. {ECO:0000305}.\nWEB RESOURCE: Name=Eye disease Crystallin, beta-B2 (CRYBB2); Note=Leiden Open Variation Database (LOVD); URL="http://www.lovd.nl/CRYBB2";', 'geneName': 'CRYBB2', 'taxid': 9606, 'type': 'Protein'}]
-#24203
-#204063
+    # add_phenotype_data(session, pheno_data_path)
+    # add_protein_data(session, protein_data_path)
+
+    add_metabolite_data(session, metabo_data_path)
+
