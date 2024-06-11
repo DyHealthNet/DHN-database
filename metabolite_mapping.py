@@ -1,9 +1,19 @@
+import os.path
 import pandas as pd
 import xml.etree.ElementTree as ET
 from query_nedrex import domain_id_to_mondo, get_disorder_data
 
 
-def read_metabolite_mapping(mapping_file):
+def download_metabolite_data(data_path: str):
+    file_path = os.path.join(data_path, 'hmdb_metabolites.xml')
+    if os.path.exists(file_path):
+        return
+    raise FileNotFoundError(f"Metabolite data at '{file_path}' does not exist, please download it from HMDB: "
+                            f"https://hmdb.ca/downloads (All Metabolites in XML Format) and save the extracted file "
+                            f"as 'hmdb_metabolites.xml' in the data directory")
+
+
+def read_metabolite_mapping(mapping_file) -> pd.DataFrame:
     """
     Read the metabolite mapping file and return a dataframe
     """
@@ -55,7 +65,8 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None)
         xrefs.extend(secondary_accessions)
         synonyms = [synonym.text for synonym in elem.findall('synonyms/synonym')]
         proteins = [protein.text for protein in elem.findall('protein_association/protein/uniprot_id')]
-        disease_associations = [disease.text for disease in elem.findall('diseases/disease/omim_id') if disease.text is not None]
+        disease_associations = [disease.text for disease in elem.findall('diseases/disease/omim_id')
+                                if disease.text is not None]
         hmdb_info[accession] = {'display_name': display_name,
                                 'description': description,
                                 'xrefs': xrefs,

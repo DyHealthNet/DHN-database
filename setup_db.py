@@ -4,7 +4,7 @@ import networkx as nx
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-from metabolite_mapping import read_metabolite_mapping, read_hmdb_data
+from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
@@ -302,6 +302,7 @@ def add_protein_data(session, proteinData_path):
 
 def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
+    download_metabolite_data(data_dir)
     metabolite_mapping = read_metabolite_mapping(metabolite_path)
     unique_metabolites = set()
 
