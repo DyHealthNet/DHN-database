@@ -306,17 +306,19 @@ if __name__ == '__main__':
     create_tables()
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    #add_protein_data(session, protein_data_path)
-    test = 0
-    protein1 = Protein(uniprot_id= "uniprot.P04049")
-    protein2 = Protein(uniprot_id = "uniprot.P51814")
-    protein3 = Protein(uniprot_id = "uniprot.P19419")
-    preoteinIds = ["uniprot.P04049", "uniprot.P51814", "uniprot.P19419", "uniprot.P43080", "uniprot.P62258", "uniprot.Q64279"]
-    proteinSet = set([protein1, protein2, protein3])
-    retrieve_interacting_proteins_neo4j(preoteinIds)
+    add_protein_data(session, protein_data_path)
+    #test = 0
+    #protein1 = Protein(uniprot_id= "uniprot.P04049")
+    #protein2 = Protein(uniprot_id = "uniprot.P51814")
+    #protein3 = Protein(uniprot_id = "uniprot.P19419")
+    #preoteinIds = ["uniprot.P04049", "uniprot.P51814", "uniprot.P19419", "uniprot.P43080", "uniprot.P62258", "uniprot.Q64279"]
+    #proteinSet = set([protein1, protein2, protein3])
+    #retrieve_interacting_proteins_neo4j(preoteinIds)
 
-
-
+    uniprot_ids = session.query(Protein.uniprot_id).all()
+    # Convert the result into a list of strings
+    uniprot_id_list = [uniprot_id[0] for uniprot_id in uniprot_ids]
+    retrieve_interacting_proteins_neo4j(uniprot_id_list)
 
     # add_disorder_data(session, pheno_data_path)
     #add_phenotype_data(session, pheno_data_path)

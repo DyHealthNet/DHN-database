@@ -42,8 +42,6 @@ def get_proteinID_neddrex(proteinID: str):
 
 
 def get_edge_associations2(node_ids: set[str], edge_type):
-
-
     """
     Fetches all edges of a certain type that are associated with a set of node ids
     :param edge_type: type of edge to fetch
@@ -111,13 +109,7 @@ def retrieve_interacting_proteins_neo4j(protein_ids):
         print(json.loads(line.decode()))
 
 
-
-
- 
 #["is_isoform_of","molecule_similarity_molecule","protein_encoded_by","protein_has_signature","protein_in_pathway","protein_interacts_with_protein","protein_similarity_protein"]
-
-
-
 
 """
 "protein_encoded_by",
