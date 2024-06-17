@@ -72,15 +72,16 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
 
 
 def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
-                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph) -> tuple[set, set, set, int]:
+                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph, obs_source: str = None) -> tuple[set, set, set, int]:
     """
-    Queries the needed snomed ids and retrieves the associated genes and disorders from NEDRex
+    Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
     :param xrefs: cross references for the mondo ids to other databases
     :param descriptions: descriptions for the mondo ids
     :param needed_snomed: snomed ids in the dataset
     :param snomed_to_mondo: map from snomed to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :return: list of genes to add, list of disorders to add, list of gene associations to add, number of snomed ids found
     """
     gene_associations = set()
@@ -101,17 +102,18 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
             for gene in genes:
                 gene_data = gene_info.get(gene, None)
                 if gene_data is None:
-                    new_gene = Gene(entrez_id=gene)
+                    new_gene = Gene(entrez_id=gene, observation_source='external')
                     genes_to_add.add(new_gene)
                     continue
                 new_gene = Gene(entrez_id=gene_data['primaryDomainId'],
                                 display_name=gene_data['displayName'],
                                 description=gene_data['description'],
                                 synonyms=gene_data['synonyms'],
-                                chromosome=gene_data['chromosome'])
+                                chromosome=gene_data['chromosome'],
+                                observation_source='external')
                 genes_to_add.add(new_gene)
 
-            disorders.add(Disorder(mondo_id=mondo_id, xrefs=xref, description=description))
+            disorders.add(Disorder(mondo_id=mondo_id, xrefs=xref, description=description, observation_source=obs_source))
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
@@ -120,7 +122,8 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
     return genes_to_add, disorders, gene_associations, found
 
 
-def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
+def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_source: str = None) \
+        -> tuple[set, set, set, int]:
     """
     Retrieve the phenotype data for the needed snomed ids
     # HPO conversion: Pathway
@@ -128,6 +131,7 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
     # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
     #
 
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :param additional_data: dictionary with additional data for the hpo ids, must be a dictionary with hpo ids as keys
     :param available_ids: dictionary with snomed ids as keys and hpo ids as values
     :return: dictionary with the phenotype data
@@ -155,7 +159,8 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
                                  xrefs=set(phenotype_data['domainIds'] + [snomed_id]),
                                  description=phenotype_data['description'],
                                  synonyms=phenotype_data['synonyms'],
-                                 display_name=phenotype_data['displayName']))
+                                 display_name=phenotype_data['displayName'],
+                                 observation_source=obs_source))
         if hpo_id not in assoc_graph:
             continue
         # get the disorder ids associated with the hpo id
@@ -190,11 +195,12 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     session.commit()
 
 
-def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str] = None):
+def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
     :param session: Database session object
     :param snomed_id_path: str, path to file with snomed ids
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :param missing_ids: Optional - set of omim ids to add to the database. Use this to add missing omim ids from
     i.e. from associations with metabolites
     :return: None
@@ -215,14 +221,14 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     assoc_graph = get_edge_associations(set(domain_to_mondo.values()), edge_type='gene_associated_with_disorder')
     # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
     # all associated with the mondo ids
-    gene_info = get_gene_data(set(assoc_graph.nodes))
+    gene_info = get_gene_data()
     gene_dict = {x['primaryDomainId']: x for x in gene_info}
 
     mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
     genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
                                                                                mondo_description, xrefs, gene_dict,
-                                                                               assoc_graph)
+                                                                               assoc_graph, obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
@@ -231,9 +237,10 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     print(f"Found and successfully added {found} snomed ids with diseases to db")
 
 
-def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
+def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data', obs_source: str = None):
     """
     Adds phenotype data to the database given a path to a file with phenotype data
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :param session: Database session object
     :param phenotype_path: str, path to file with phenotype data
     :param data_dir: str, path to the data directory
@@ -257,7 +264,7 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
     pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
 
     additional_data = {item['primaryDomainId']: item for item in pheno_data}
-    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_snomed_ids, additional_data)
+    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_snomed_ids, additional_data, obs_source)
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database
@@ -311,7 +318,7 @@ def add_protein_data(session, proteinData_path):
     session.commit()
 
 
-def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
+def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs_source: str = None):
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
     download_metabolite_data(data_dir)
     metabolite_mapping = read_metabolite_mapping(metabolite_path)
@@ -352,7 +359,8 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
         metabolites.append(Metabolite(hmdb_id=metabolite_name, display_name=hmdb_mapping[metabolite]['display_name'],
                                       description=hmdb_mapping[metabolite]['description'],
                                       synonyms=hmdb_mapping[metabolite]['synonyms'],
-                                      xrefs=hmdb_mapping[metabolite]['xrefs'], ))
+                                      xrefs=hmdb_mapping[metabolite]['xrefs'],
+                                      observation_source=obs_source))
 
         for disease in hmdb_mapping[metabolite]['diseases']:
             if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
@@ -392,10 +400,12 @@ def add_missing(session, data, node_type):
         raise ValueError(f"Invalid node type: {node_type}")
 
     print(f"Got {len(data)} missing {node_type} to add to the database.")
-    valid_node_types[node_type](session, missing_ids=data)
+    valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
 
 if __name__ == '__main__':
+    # cohort study
+    observations = "CHRIS"
     # Define a session
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -404,8 +414,8 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
 
-    # add_disorder_data(session, pheno_data_path)
-    # add_phenotype_data(session, pheno_data_path)
-    # add_protein_data(session, protein_data_path)
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    # add_protein_data(session, protein_data_path, obs_source=observations)
 
-    add_metabolite_data(session, metabo_data_path)
+    # add_metabolite_data(session, metabo_data_path, obs_source=observations)
