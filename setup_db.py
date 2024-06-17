@@ -4,7 +4,8 @@ import networkx as nx
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data
+from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
+    retrieve_assoc_metabolite_nodes
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
@@ -189,27 +190,37 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     session.commit()
 
 
-def add_disorder_data(session, snomed_id_path: str):
+def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str] = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
     :param session: Database session object
     :param snomed_id_path: str, path to file with snomed ids
+    :param missing_ids: Optional - set of omim ids to add to the database. Use this to add missing omim ids from
+    i.e. from associations with metabolites
     :return: None
     """
-    needed_snomed = get_needed_snomed_ids(snomed_id_path)
-    data = get_disorder_data(needed_snomed)
-    snomed_to_mondo = domain_id_to_mondo(data)
+    if missing_ids is None:
+        needed_snomed = get_needed_snomed_ids(snomed_id_path)
+        data = get_disorder_data(needed_snomed)
+        domain_to_mondo = domain_id_to_mondo(data)
+    else:
+        missing_ids = {f"omim.{x}" for x in missing_ids}
+        data = get_disorder_data(missing_ids)
+        domain_to_mondo = domain_id_to_mondo(data, 'omim')
+        # just to keep downstream code consistent
+        needed_snomed = missing_ids
+
     data = {x['primaryDomainId']: x for x in data}
-    xrefs = {mondo: data[mondo]['domainIds'] for mondo in snomed_to_mondo.values() if 'domainIds' in data[mondo]}
-    assoc_graph = get_edge_associations(set(snomed_to_mondo.values()), edge_type='gene_associated_with_disorder')
+    xrefs = {mondo: data[mondo]['domainIds'] for mondo in domain_to_mondo.values() if 'domainIds' in data[mondo]}
+    assoc_graph = get_edge_associations(set(domain_to_mondo.values()), edge_type='gene_associated_with_disorder')
     # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
     # all associated with the mondo ids
     gene_info = get_gene_data(set(assoc_graph.nodes))
     gene_dict = {x['primaryDomainId']: x for x in gene_info}
 
-    mondo_description = {mondo: data[mondo]['description'] for mondo in snomed_to_mondo.values()}
+    mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
-    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, snomed_to_mondo,
+    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
                                                                                mondo_description, xrefs, gene_dict,
                                                                                assoc_graph)
 
@@ -327,28 +338,32 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
     metabolite_protein_associations = []
     metabolite_disease_associations = []
 
+    prots, diseases = retrieve_assoc_metabolite_nodes(hmdb_mapping)
+    missing_proteins = {x for x in prots if session.query(Protein).filter_by(uniprot_id=x).first() is None}
+    missing_diseases = {x for x in diseases if session.query(Disorder)
+                        .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
+
+    add_missing(session, missing_diseases, 'disorders')
+    # add_missing(session, missing_proteins, 'proteins')
+
     for metabolite in hmdb_mapping:
         metabolite_name = f"hmdb.{metabolite}"
-        # check if metabolite is in the db already and if so, skip
-        exists = session.query(Metabolite).filter_by(hmdb_id=metabolite_name).first()
-        # if exists is not None:
-        #    continue
+
         metabolites.append(Metabolite(hmdb_id=metabolite_name, display_name=hmdb_mapping[metabolite]['display_name'],
                                       description=hmdb_mapping[metabolite]['description'],
                                       synonyms=hmdb_mapping[metabolite]['synonyms'],
                                       xrefs=hmdb_mapping[metabolite]['xrefs'], ))
-
-        for protein in hmdb_mapping[metabolite]['proteins']:
-            # check if the protein is in the db, if it is not, skip
-            if session.query(Protein).filter_by(uniprot_id=protein).first() is None:
-                continue
-            metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
 
         for disease in hmdb_mapping[metabolite]['diseases']:
             if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
                 continue
             metabolite_disease_associations.append(MetaboliteAssocDisorder(hmdb_id=metabolite_name,
                                                                            mondo_id=omim_mapping[f"omim.{disease}"]))
+
+        for protein in hmdb_mapping[metabolite]['proteins']:
+            if session.query(Protein).filter_by(uniprot_id=protein).first() is None:
+                continue
+            metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
 
     print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
           f"as well as {len(metabolite_protein_associations)} protein associations and "
@@ -357,6 +372,27 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data'):
     add_items(session, metabolite_protein_associations, ProteinAssocMetabolite, ['hmdb_id', 'uniprot_id'])
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
+
+
+def add_missing(session, data, node_type):
+    """
+    Adds missing data to the database
+    :param session: Session object
+    :param data: Data to add
+    :param node_type: Type of node to add
+    :return: None
+    """
+    valid_node_types = {
+        'proteins': add_protein_data,
+        'disorders': add_disorder_data,
+        'metabolites': add_metabolite_data,
+        'phenotypes': add_phenotype_data,
+    }
+    if node_type not in valid_node_types:
+        raise ValueError(f"Invalid node type: {node_type}")
+
+    print(f"Got {len(data)} missing {node_type} to add to the database.")
+    valid_node_types[node_type](session, missing_ids=data)
 
 
 if __name__ == '__main__':
@@ -373,4 +409,3 @@ if __name__ == '__main__':
     # add_protein_data(session, protein_data_path)
 
     add_metabolite_data(session, metabo_data_path)
-

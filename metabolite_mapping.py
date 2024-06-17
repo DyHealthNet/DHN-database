@@ -79,6 +79,15 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None)
     return hmdb_info
 
 
+def retrieve_assoc_metabolite_nodes(hmdb_mapping):
+    proteins = set()
+    diseases = set()
+    for metabolite in hmdb_mapping:
+        proteins.update(hmdb_mapping[metabolite]['proteins'])
+        diseases.update(hmdb_mapping[metabolite]['diseases'])
+    return proteins, diseases
+
+
 if __name__ == '__main__':
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     hmdb_data_path = '../data/hmdb_metabolites.xml'
