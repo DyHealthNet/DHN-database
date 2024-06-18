@@ -12,6 +12,7 @@ class Gene(Base):
     description = Column(String)
     synonyms = Column(ARRAY(String))
     chromosome = Column(String)
+    observation_source = Column(String)
 
 
 class Disorder(Base):
@@ -19,6 +20,7 @@ class Disorder(Base):
     mondo_id = Column(String, primary_key=True)
     description = Column(String)
     xrefs = Column(ARRAY(String))  # take from nedrex
+    observation_source = Column(String)
 
 
 class Phenotype(Base):
@@ -28,6 +30,7 @@ class Phenotype(Base):
     description = Column(String)
     xrefs = Column(ARRAY(String))
     synonyms = Column(String)
+    observation_source = Column(String)
 
 
 class Protein(Base):
@@ -36,6 +39,7 @@ class Protein(Base):
     sequence = Column(String)
     gene_entrez_id = Column(String, ForeignKey('genes.entrez_id'))
     description = Column(String)
+    observation_source = Column(String)
 
 
 class Metabolite(Base):
@@ -45,6 +49,7 @@ class Metabolite(Base):
     description = Column(String)
     synonyms = Column(String)
     xrefs = Column(ARRAY(String))
+    observation_source = Column(String)
 
 
 class GeneAssocDisorder(Base):

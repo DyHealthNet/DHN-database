@@ -3,12 +3,17 @@ import os
 import networkx as nx
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
+from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
+    retrieve_assoc_metabolite_nodes
 from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import get_proteinID_neddrex, read_proteinID_chris, add_proteinSet_data, retrieve_interacting_proteins_neo4j
+from protein_mapping import get_proteinID_neddrex, read_proteinID_chris, add_proteinSet_data, \
+    retrieve_interacting_proteins_neo4j
 from nedrex.core import get_collection_attributes
+
 # create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
@@ -67,15 +72,16 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
 
 
 def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
-                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph) -> tuple[set, set, set, int]:
+                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph, obs_source: str = None) -> tuple[set, set, set, int]:
     """
-    Queries the needed snomed ids and retrieves the associated genes and disorders from NEDRex
+    Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
     :param xrefs: cross references for the mondo ids to other databases
     :param descriptions: descriptions for the mondo ids
     :param needed_snomed: snomed ids in the dataset
     :param snomed_to_mondo: map from snomed to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :return: list of genes to add, list of disorders to add, list of gene associations to add, number of snomed ids found
     """
     gene_associations = set()
@@ -96,17 +102,18 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
             for gene in genes:
                 gene_data = gene_info.get(gene, None)
                 if gene_data is None:
-                    new_gene = Gene(entrez_id=gene)
+                    new_gene = Gene(entrez_id=gene, observation_source='external')
                     genes_to_add.add(new_gene)
                     continue
                 new_gene = Gene(entrez_id=gene_data['primaryDomainId'],
                                 display_name=gene_data['displayName'],
                                 description=gene_data['description'],
                                 synonyms=gene_data['synonyms'],
-                                chromosome=gene_data['chromosome'])
+                                chromosome=gene_data['chromosome'],
+                                observation_source='external')
                 genes_to_add.add(new_gene)
 
-            disorders.add(Disorder(mondo_id=mondo_id, xrefs=xref, description=description))
+            disorders.add(Disorder(mondo_id=mondo_id, xrefs=xref, description=description, observation_source=obs_source))
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
@@ -115,7 +122,8 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
     return genes_to_add, disorders, gene_associations, found
 
 
-def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
+def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_source: str = None) \
+        -> tuple[set, set, set, int]:
     """
     Retrieve the phenotype data for the needed snomed ids
     # HPO conversion: Pathway
@@ -123,6 +131,7 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
     # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
     #
 
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :param additional_data: dictionary with additional data for the hpo ids, must be a dictionary with hpo ids as keys
     :param available_ids: dictionary with snomed ids as keys and hpo ids as values
     :return: dictionary with the phenotype data
@@ -150,7 +159,8 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict):
                                  xrefs=set(phenotype_data['domainIds'] + [snomed_id]),
                                  description=phenotype_data['description'],
                                  synonyms=phenotype_data['synonyms'],
-                                 display_name=phenotype_data['displayName']))
+                                 display_name=phenotype_data['displayName'],
+                                 observation_source=obs_source))
         if hpo_id not in assoc_graph:
             continue
         # get the disorder ids associated with the hpo id
@@ -185,29 +195,40 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     session.commit()
 
 
-def add_disorder_data(session, snomed_id_path: str):
+def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
     :param session: Database session object
     :param snomed_id_path: str, path to file with snomed ids
+    :param obs_source: Describes the source of observations - e.g. CHRIS
+    :param missing_ids: Optional - set of omim ids to add to the database. Use this to add missing omim ids from
+    i.e. from associations with metabolites
     :return: None
     """
-    needed_snomed = get_needed_snomed_ids(snomed_id_path)
-    data = get_disorder_data(needed_snomed)
-    snomed_to_mondo = domain_id_to_mondo(data)
+    if missing_ids is None:
+        needed_snomed = get_needed_snomed_ids(snomed_id_path)
+        data = get_disorder_data(needed_snomed)
+        domain_to_mondo = domain_id_to_mondo(data)
+    else:
+        missing_ids = {f"omim.{x}" for x in missing_ids}
+        data = get_disorder_data(missing_ids)
+        domain_to_mondo = domain_id_to_mondo(data, 'omim')
+        # just to keep downstream code consistent
+        needed_snomed = missing_ids
+
     data = {x['primaryDomainId']: x for x in data}
-    xrefs = {mondo: data[mondo]['domainIds'] for mondo in snomed_to_mondo.values() if 'domainIds' in data[mondo]}
-    assoc_graph = get_edge_associations(set(snomed_to_mondo.values()), edge_type='gene_associated_with_disorder')
+    xrefs = {mondo: data[mondo]['domainIds'] for mondo in domain_to_mondo.values() if 'domainIds' in data[mondo]}
+    assoc_graph = get_edge_associations(set(domain_to_mondo.values()), edge_type='gene_associated_with_disorder')
     # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
     # all associated with the mondo ids
-    gene_info = get_gene_data(set(assoc_graph.nodes))
+    gene_info = get_gene_data()
     gene_dict = {x['primaryDomainId']: x for x in gene_info}
 
-    mondo_description = {mondo: data[mondo]['description'] for mondo in snomed_to_mondo.values()}
+    mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
-    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, snomed_to_mondo,
+    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
                                                                                mondo_description, xrefs, gene_dict,
-                                                                               assoc_graph)
+                                                                               assoc_graph, obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
@@ -216,9 +237,10 @@ def add_disorder_data(session, snomed_id_path: str):
     print(f"Found and successfully added {found} snomed ids with diseases to db")
 
 
-def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
+def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data', obs_source: str = None):
     """
     Adds phenotype data to the database given a path to a file with phenotype data
+    :param obs_source: Describes the source of observations - e.g. CHRIS
     :param session: Database session object
     :param phenotype_path: str, path to file with phenotype data
     :param data_dir: str, path to the data directory
@@ -242,7 +264,7 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data'):
     pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
 
     additional_data = {item['primaryDomainId']: item for item in pheno_data}
-    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_snomed_ids, additional_data)
+    genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_snomed_ids, additional_data, obs_source)
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database
@@ -296,35 +318,104 @@ def add_protein_data(session, proteinData_path):
     session.commit()
 
 
-# add_items(session, genes_to_add, Gene, ['entrez_id'])
+def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs_source: str = None):
+    hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
+    download_metabolite_data(data_dir)
+    metabolite_mapping = read_metabolite_mapping(metabolite_path)
+    unique_metabolites = set()
+
+    # split metabolites that have ; in them
+    for metabolite in metabolite_mapping['hmdb_id'].dropna():
+        unique_metabolites.update(metabolite.split(';'))
+
+    print(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
+
+    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites)
+    print(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
+          f"{len(unique_metabolites)} metabolites in the mapping file.")
+
+    omim_diseases = set()
+    for metabolite in hmdb_mapping:
+        omim_diseases.update(hmdb_mapping[metabolite]['diseases'])
+    omim_diseases = {f"omim.{x}" for x in omim_diseases}
+    disease_data = get_disorder_data(omim_diseases)
+    omim_mapping = domain_id_to_mondo(disease_data, 'omim')
+
+    metabolites = []
+    metabolite_protein_associations = []
+    metabolite_disease_associations = []
+
+    prots, diseases = retrieve_assoc_metabolite_nodes(hmdb_mapping)
+    missing_proteins = {x for x in prots if session.query(Protein).filter_by(uniprot_id=x).first() is None}
+    missing_diseases = {x for x in diseases if session.query(Disorder)
+                        .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
+
+    add_missing(session, missing_diseases, 'disorders')
+    # add_missing(session, missing_proteins, 'proteins')
+
+    for metabolite in hmdb_mapping:
+        metabolite_name = f"hmdb.{metabolite}"
+
+        metabolites.append(Metabolite(hmdb_id=metabolite_name, display_name=hmdb_mapping[metabolite]['display_name'],
+                                      description=hmdb_mapping[metabolite]['description'],
+                                      synonyms=hmdb_mapping[metabolite]['synonyms'],
+                                      xrefs=hmdb_mapping[metabolite]['xrefs'],
+                                      observation_source=obs_source))
+
+        for disease in hmdb_mapping[metabolite]['diseases']:
+            if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
+                continue
+            metabolite_disease_associations.append(MetaboliteAssocDisorder(hmdb_id=metabolite_name,
+                                                                           mondo_id=omim_mapping[f"omim.{disease}"]))
+
+        for protein in hmdb_mapping[metabolite]['proteins']:
+            if session.query(Protein).filter_by(uniprot_id=protein).first() is None:
+                continue
+            metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
+
+    print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
+          f"as well as {len(metabolite_protein_associations)} protein associations and "
+          f"{len(metabolite_disease_associations)} disease associations.")
+    add_items(session, metabolites, Metabolite, ['hmdb_id'])
+    add_items(session, metabolite_protein_associations, ProteinAssocMetabolite, ['hmdb_id', 'uniprot_id'])
+    add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
+    session.commit()
+
+
+def add_missing(session, data, node_type):
+    """
+    Adds missing data to the database
+    :param session: Session object
+    :param data: Data to add
+    :param node_type: Type of node to add
+    :return: None
+    """
+    valid_node_types = {
+        'proteins': add_protein_data,
+        'disorders': add_disorder_data,
+        'metabolites': add_metabolite_data,
+        'phenotypes': add_phenotype_data,
+    }
+    if node_type not in valid_node_types:
+        raise ValueError(f"Invalid node type: {node_type}")
+
+    print(f"Got {len(data)} missing {node_type} to add to the database.")
+    valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
 
 if __name__ == '__main__':
+    # cohort study
+    observations = "CHRIS"
     # Define a session
     Session = sessionmaker(bind=engine)
     session = Session()
     create_tables()
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    add_protein_data(session, protein_data_path)
-    #test = 0
-    #protein1 = Protein(uniprot_id= "uniprot.P04049")
-    #protein2 = Protein(uniprot_id = "uniprot.P51814")
-    #protein3 = Protein(uniprot_id = "uniprot.P19419")
-    #preoteinIds = ["uniprot.P04049", "uniprot.P51814", "uniprot.P19419", "uniprot.P43080", "uniprot.P62258", "uniprot.Q64279"]
-    #proteinSet = set([protein1, protein2, protein3])
-    #retrieve_interacting_proteins_neo4j(preoteinIds)
+    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
 
-    uniprot_ids = session.query(Protein.uniprot_id).all()
-    # Convert the result into a list of strings
-    uniprot_id_list = [uniprot_id[0] for uniprot_id in uniprot_ids]
-    retrieve_interacting_proteins_neo4j(uniprot_id_list)
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    # add_protein_data(session, protein_data_path, obs_source=observations)
 
-    # add_disorder_data(session, pheno_data_path)
-    #add_phenotype_data(session, pheno_data_path)
-    #add_proteinSet_data(session, protein_data_path)
-    #print(get_collection_attributes("protein_interacts_with_protein", include_counts=True))
-    #print(testneo4j)
-    # 'primaryDomainId': 'uniprot.P43320', 'domainIds': ['uniprot.P43320'], 'sequence': 'MASDHQTQAGKPQSLNPKIIIFEQENFQGHSHELNGPCPNLKETGVEKAGSVLVQAGPWVGYEQANCKGEQFVFEKGEYPRWDSWTSSRRTDSLSSLRPIKVDSQEHKIILYENPNFTGKKMEIIDDDVPSFHAHGYQEKVSSVRVQSGTWVGYQYPGYRGLQYLLEKGDYKDSSDFGAPHPQVQSVRRIRDMQWHQRGAFHPSN', 'displayName': 'CRBB2_HUMAN', 'synonyms': ['Beta-crystallin B2', 'Beta-B2 crystallin', 'Beta-crystallin Bp'], 'comments': 'FUNCTION: Crystallins are the dominant structural components of the vertebrate eye lens.\nSUBUNIT: Homo/heterodimer, or complexes of higher-order. The structure of beta-crystallin oligomers seems to be stabilized through interactions between the N-terminal arms (By similarity). {ECO:0000250}.\nINTERACTION: Self; NbExp=5; IntAct=EBI-974082, EBI-974082;\nDOMAIN: Has a two-domain beta-structure, folded into four very similar Greek key motifs.\nMASS SPECTROMETRY: Mass=23291; Mass_error=3; Method=Electrospray; Evidence={ECO:0000269|PubMed:8999933};\nMASS SPECTROMETRY: Mass=23289; Method=Electrospray; Evidence={ECO:0000269|PubMed:8175657};\nMASS SPECTROMETRY: Mass=23290; Method=Electrospray; Evidence={ECO:0000269|PubMed:10930324};\nDISEASE: Cataract 3, multiple types (CTRCT3) [MIM:601547]: An opacification of the crystalline lens of the eye that frequently results in visual impairment or blindness. Opacities vary in morphology, are often confined to a portion of the lens, and may be static or progressive. CTRCT3 includes congenital cerulean and sutural cataract with punctate and cerulean opacities, among others. Cerulean cataract is characterized by peripheral bluish and white opacifications organized in concentric layers with occasional central lesions arranged radially. The opacities are observed in the superficial layers of the fetal nucleus as well as the adult nucleus of the lens. Involvement is usually bilateral. Visual acuity is only mildly reduced in childhood. In adulthood, the opacifications may progress, making lens extraction necessary. Histologically the lesions are described as fusiform cavities between lens fibers which contain a deeply staining granular material. Although the lesions may take on various colors, a dull blue is the most common appearance and is responsible for the designation cerulean cataract. Sutural cataract with punctate and cerulean opacities is characterized by white opacification around the anterior and posterior Y sutures, and grayish and bluish, spindle shaped, oval punctate and cerulean opacities of various sizes arranged in lamellar form. The spots are more concentrated towards the peripheral layers and do not delineate the embryonal or fetal nucleus. Phenotypic variation with respect to the size and density of the sutural opacities as well as the number and position of punctate and cerulean spots is observed among affected subjects. {ECO:0000269|PubMed:10634616, ECO:0000269|PubMed:9158139}. Note=The disease is caused by mutations affecting the gene represented in this entry.\nSIMILARITY: Belongs to the beta/gamma-crystallin family. {ECO:0000305}.\nWEB RESOURCE: Name=Eye disease Crystallin, beta-B2 (CRYBB2); Note=Leiden Open Variation Database (LOVD); URL="http://www.lovd.nl/CRYBB2";', 'geneName': 'CRYBB2', 'taxid': 9606, 'type': 'Protein'}]
-#24203
-#204063
+    # add_metabolite_data(session, metabo_data_path, obs_source=observations)

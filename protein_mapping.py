@@ -22,6 +22,7 @@ def read_proteinID_chris(proteinID_path: str) :
 
     return df['UniProt'][1:5].unique()
 
+
 def get_proteinID_neddrex(proteinID: str):
     """
     fetches data for proteinID from neddrex
