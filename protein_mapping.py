@@ -8,9 +8,38 @@ import itertools
 from query_nedrex import get_disorder_data, domain_id_to_mondo, get_needed_snomed_ids, get_edge_associations, \
     get_harmonizome_data, get_phenotype_data
 from nedrex.core import iter_nodes, iter_edges
+from models import Protein
 from nedrex.core import api_keys_active, get_api_key
 
 
+
+#def get_protein_nodes(uniprot_ids: set[str] = None) -> list[dict]:
+#    print(uniprot_ids)
+ #   data = [node for node in iter_nodes('protein') if node['primaryDomainId'] in uniprot_ids]
+ #   test = 2
+  #  return data
+
+
+def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> list[dict]:
+    print("UniProt IDs:", uniprot_ids)
+
+    protein_set = []
+    for node in iter_nodes('protein'):
+        # Remove the 'uniprot.' prefix
+        primary_domain_id = node['primaryDomainId'].replace('uniprot.', '')
+        if primary_domain_id in uniprot_ids:
+            protein = Protein(
+                uniprot_id= str(primary_domain_id),
+                gene_entrez_id=str(node.get('geneName')),
+                sequence=str(node.get('sequence')),
+                description=str(node.get('comments')),
+                observation_source=observation_source
+            )
+            protein_set.append(protein)
+
+    #print("Matching nodes:", data)
+
+    return protein_set
 
 
 def read_proteinID_chris(proteinID_path: str) :
@@ -20,7 +49,7 @@ def read_proteinID_chris(proteinID_path: str) :
     df = pd.read_csv(proteinID_path, sep='\t')
    # print(f"Found {len(df)} proteinIDs with {len(df['UniProt'].unique())} unique ids")
 
-    return df['UniProt'][1:5].unique()
+    return df['UniProt'].unique()
 
 
 def get_proteinID_neddrex(proteinID: str):

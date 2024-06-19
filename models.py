@@ -37,7 +37,7 @@ class Protein(Base):
     __tablename__ = 'proteins'
     uniprot_id = Column(String, primary_key=True)
     sequence = Column(String)
-    gene_entrez_id = Column(String, ForeignKey('genes.entrez_id'))
+    gene_entrez_id = Column(String)
     description = Column(String)
     observation_source = Column(String)
 
