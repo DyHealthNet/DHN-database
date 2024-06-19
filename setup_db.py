@@ -10,9 +10,7 @@ from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import get_proteinID_neddrex, read_proteinID_chris, add_proteinSet_data, \
-    retrieve_interacting_proteins_neo4j, get_protein_nodes
-from nedrex.core import get_collection_attributes
+from protein_mapping import read_proteinID_chris, get_protein_nodes, retrieve_interacting_proteins_neo4j
 from sqlalchemy import create_engine, MetaData, create_engine, inspect, Table
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -304,12 +302,26 @@ def add_phenotype_data(session, phenotype_path: str, data_dir: str = '../data', 
     print(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
-def add_protein_data(session, proteinData_path, observation_source):
+def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds, observation_source)
-    test = 2
+    proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    proteinInteractions = get_protein_interactions(proteinIds)
+    add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
     add_items(session, proteinNodes, Protein, ['uniprot_id'])
     session.commit()
+
+def get_protein_interactions(proteinIds):
+    prefixed_proteinIds = [f"uniprot.{entry}" for entry in proteinIds]
+    # retrieve_interacting_proteins_neo4j(proteinIds)
+    assoc_graph = get_edge_associations(set(prefixed_proteinIds), edge_type='protein_interacts_with_protein',
+                                        direction='undirected')
+    proteinInteractions = []
+    for edge in assoc_graph.edges():
+        memberOne = edge[0].replace("uniprot.", "")
+        memberTwo = edge[1].replace("uniprot.", "")
+        proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=memberOne, uniprot_id_memberTwo=memberTwo))
+    return proteinInteractions
+
 
 
 def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs_source: str = None):
@@ -398,68 +410,32 @@ def add_missing(session, data, node_type):
 
 
 if __name__ == '__main__':
+    #Base.metadata.drop_all(engine)
+
     # cohort study
     observations = "CHRIS"
     # Define a session
     Session = sessionmaker(bind=engine)
     session = Session()
-
     create_tables()
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    inspector = inspect(engine)
-    #metadata = MetaData()
-    #metadata.reflect(bind=engine)
-    #metadata.drop_all(bind=engine)
-    inspector = inspect(engine)
-    # Get and print the names of all tables
-   # table_names = inspector.get_table_names()
-   # print("Tables and their columns in the database:")
-    #for table_name in table_names:
-     #   print(f"\nTable: {table_name}")
-        # Get the columns for each table
-      #  columns = inspector.get_columns(table_name)
-       # for column in columns:
-        #    column_name = column['name']
-         #   column_type = column['type']
-          #  print(f" - Column: {column_name}, Type: {column_type}")
     #add_disorder_data(session, pheno_data_path, obs_source=observations)
-    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    # add_protein_data(session, protein_data_path, obs_source=observations)
-   # proteinIds = set(read_proteinID_chris(protein_data_path))
-   # protein_test_ids = ['P51814', 'P19419', 'P43080', 'Q14457', 'Q01968', 'O95238']
-    #print("test:" ,test)
-    metadata = MetaData()
-    #add_protein_data(session, protein_data_path,observation_source='CHRIS')
-    specific_table = Table('proteins', metadata, autoload_with=engine)
-
-    # Query the table
-    query = session.query(specific_table).count()  # Limit to 10 entries for display
+    #add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    #add_protein_data(session, protein_data_path, obs_source=observations)
+    #add_metabolite_data(session, metabo_data_path, obs_source=observations) | missing the file please upload @elias
+    #proteinIds = read_proteinID_chris(protein_data_path)
+    #prefixed_proteinIds = [f"uniprot.{entry}" for entry in proteinIds]
+    # retrieve_interacting_proteins_neo4j(proteinIds)
+   # assoc_graph = get_edge_associations(set(prefixed_proteinIds), edge_type='protein_interacts_with_protein',direction='undirected')
+   # proteinInteractions = []
+   # for edge in assoc_graph.edges():
+    #    memberOne = edge[0].replace("uniprot.", "")
+     #   memberTwo = edge[1].replace("uniprot.", "")
+      #  proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=memberOne, uniprot_id_memberTwo=memberTwo))
+    #add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
+    entries = session.query(ProteinAssocProtein).count() # 1.438.688 entries
     test =2
-
-    #test = 2
-    #proteinNodes = get_protein_nodes(proteinIds)
-    #nodeExample = {'primaryDomainId': 'uniprot.P31946',
-    # 'comments': "FUNCTION: Adapter protein implicated in the regulation of a large spectrum of both general and specialized signaling pathways. Binds to a large number of partners, usually by recognition of a phosphoserine or phosphothreonine motif. Binding generally results in the modulation of the activity of the binding partner. Negative regulator of osteogenesis. Blocks the nuclear translocation of the phosphorylated form (by AKT1) of SRPK2 and antagonizes its stimulatory effect on cyclin D1 expression resulting in blockage of neuronal apoptosis elicited by SRPK2. Negative regulator of signaling cascades that mediate activation of MAP kinases via AKAP13. {ECO:0000269|PubMed:17717073, ECO:0000269|PubMed:19592491, ECO:0000269|PubMed:21224381}.\nSUBUNIT: Homodimer (PubMed:17717073). Interacts with SAMSN1 and PRKCE (By similarity). Interacts with AKAP13 (PubMed:21224381). Interacts with SSH1 and TORC2/CRTC2 (PubMed:15454081, PubMed:15159416). Interacts with ABL1; the interaction results in cytoplasmic location of ABL1 and inhibition of cABL-mediated apoptosis (PubMed:15696159). Interacts with ROR2 (dimer); the interaction results in phosphorylation of YWHAB on tyrosine residues (PubMed:17717073). Interacts with GAB2 (PubMed:19172738). Interacts with YAP1 (phosphorylated form) (PubMed:17974916). Interacts with the phosphorylated (by AKT1) form of SRPK2 (PubMed:19592491). Interacts with PKA-phosphorylated AANAT (PubMed:11427721). Interacts with MYO1C (PubMed:24636949). Interacts with SIRT2 (PubMed:18249187). Interacts with the 'Thr-369' phosphorylated form of DAPK2 (PubMed:26047703). Interacts with PI4KB, TBC1D22A and TBC1D22B (PubMed:23572552). Interacts with the 'Ser-1134' and 'Ser-1161' phosphorylated form of SOS1 (PubMed:22827337). Interacts (via phosphorylated form) with YWHAB; this interaction occurs in a protein kinase AKT1-dependent manner (PubMed:15538381). Interacts with SLITRK1 (PubMed:19640509). Interacts with SYNPO2 (phosphorylated form); YWHAB competes with ACTN2 for interaction with SYNPO2 (By similarity). Interacts with RIPOR2 (via phosphorylated form) isoform 2; this interaction occurs in a chemokine-dependent manner and does not compete for binding of RIPOR2 with RHOA nor blocks inhibition of RIPOR2- mediated RHOA activity (PubMed:25588844). Interacts with MARK2 and MARK3 (PubMed:16959763). Interacts with TESK1; the interaction is dependent on the phosphorylation of TESK1 'Ser-437' and inhibits TESK1 kinase activity (PubMed:11555644). Interacts with MEFV (PubMed:27030597). Interacts with HDAC4 (PubMed:33537682). Interacts with ADAM22 (via C-terminus) (PubMed:15882968). {ECO:0000250|UniProtKB:Q9CQV8, ECO:0000269|PubMed:11427721, ECO:0000269|PubMed:11555644, ECO:0000269|PubMed:15159416, ECO:0000269|PubMed:15454081, ECO:0000269|PubMed:15538381, ECO:0000269|PubMed:15696159, ECO:0000269|PubMed:15882968, ECO:0000269|PubMed:16959763, ECO:0000269|PubMed:17085597, ECO:0000269|PubMed:17717073, ECO:0000269|PubMed:17974916, ECO:0000269|PubMed:18249187, ECO:0000269|PubMed:19172738, ECO:0000269|PubMed:19592491, ECO:0000269|PubMed:19640509, ECO:0000269|PubMed:21224381, ECO:0000269|PubMed:22827337, ECO:0000269|PubMed:23572552, ECO:0000269|PubMed:24636949, ECO:0000269|PubMed:25588844, ECO:0000269|PubMed:26047703, ECO:0000269|PubMed:27030597, ECO:0000269|PubMed:33537682}.\nSUBUNIT: (Microbial infection) Interacts with herpes simplex virus 1 protein UL46. {ECO:0000269|PubMed:23938468}.\nSUBUNIT: (Microbial infection) Probably interacts with Chlamydia trachomatis protein IncG. {ECO:0000305|PubMed:11260479}.\nINTERACTION: P31946; Q9P0K1-3: ADAM22; NbExp=2; IntAct=EBI-359815, EBI-1567267; P31946; Q12802: AKAP13; NbExp=3; IntAct=EBI-359815, EBI-1373806; P31946; Q96B36: AKT1S1; NbExp=3; IntAct=EBI-359815, EBI-720593; P31946; A0A0S2Z5Q7: ALS2; NbExp=3; IntAct=EBI-359815, EBI-25928834; P31946; P05067: APP; NbExp=3; IntAct=EBI-359815, EBI-77613; P31946; P54253: ATXN1; NbExp=5; IntAct=EBI-359815, EBI-930964; P31946; Q92934: BAD; NbExp=5; IntAct=EBI-359815, EBI-700771; P31946; P15056: BRAF; NbExp=8; IntAct=EBI-359815, EBI-365980; P31946; P22681: CBL; NbExp=4; IntAct=EBI-359815, EBI-518228; P31946; O00257: CBX4; NbExp=3; IntAct=EBI-359815, EBI-722425; P31946; P30304: CDC25A; NbExp=10; IntAct=EBI-359815, EBI-747671; P31946; P30305: CDC25B; NbExp=5; IntAct=EBI-359815, EBI-1051746; P31946; P30307: CDC25C; NbExp=6; IntAct=EBI-359815, EBI-974439; P31946; O94921: CDK14; NbExp=6; IntAct=EBI-359815, EBI-1043945; P31946; Q53ET0: CRTC2; NbExp=4; IntAct=EBI-359815, EBI-1181987; P31946; Q9NYF0: DACT1; NbExp=4; IntAct=EBI-359815, EBI-3951744; P31946; Q13627-2: DYRK1A; NbExp=3; IntAct=EBI-359815, EBI-1053621; P31946; Q9UQC2: GAB2; NbExp=6; IntAct=EBI-359815, EBI-975200; P31946; P55040: GEM; NbExp=4; IntAct=EBI-359815, EBI-744104; P31946; P56524: HDAC4; NbExp=5; IntAct=EBI-359815, EBI-308629; P31946; P42858: HTT; NbExp=11; IntAct=EBI-359815, EBI-466029; P31946; Q5S007: LRRK2; NbExp=5; IntAct=EBI-359815, EBI-5323863; P31946; Q99759: MAP3K3; NbExp=4; IntAct=EBI-359815, EBI-307281; P31946; Q99683: MAP3K5; NbExp=3; IntAct=EBI-359815, EBI-476263; P31946; Q7KZI7: MARK2; NbExp=5; IntAct=EBI-359815, EBI-516560; P31946; P27448: MARK3; NbExp=8; IntAct=EBI-359815, EBI-707595; P31946; P26045: PTPN3; NbExp=6; IntAct=EBI-359815, EBI-1047946; P31946; P04049: RAF1; NbExp=35; IntAct=EBI-359815, EBI-365996; P31946; Q96TC7: RMDN3; NbExp=5; IntAct=EBI-359815, EBI-1056589; P31946; P61587: RND3; NbExp=2; IntAct=EBI-359815, EBI-1111534; P31946; Q96JI7: SPG11; NbExp=2; IntAct=EBI-359815, EBI-2822128; P31946; P78362: SRPK2; NbExp=2; IntAct=EBI-359815, EBI-593303; P31946; Q8WYL5: SSH1; NbExp=3; IntAct=EBI-359815, EBI-1222387; P31946; P49815: TSC2; NbExp=6; IntAct=EBI-359815, EBI-396587; P31946; P46937: YAP1; NbExp=7; IntAct=EBI-359815, EBI-1044059; P31946; P31946: YWHAB; NbExp=3; IntAct=EBI-359815, EBI-359815; P31946; P62258: YWHAE; NbExp=12; IntAct=EBI-359815, EBI-356498; P31946; P61981: YWHAG; NbExp=5; IntAct=EBI-359815, EBI-359832; P31946; P27348: YWHAQ; NbExp=5; IntAct=EBI-359815, EBI-359854; P31946; P67828: CSNK1A1; Xeno; NbExp=3; IntAct=EBI-359815, EBI-7540603; P31946; P55041: Gem; Xeno; NbExp=3; IntAct=EBI-359815, EBI-7082069; P31946; Q11184: let-756; Xeno; NbExp=2; IntAct=EBI-359815, EBI-3843983; P31946; P61588: Rnd3; Xeno; NbExp=5; IntAct=EBI-359815, EBI-6930266; P31946; Q91YE8: Synpo2; Xeno; NbExp=3; IntAct=EBI-359815, EBI-7623057; P31946; B7UM99: tir; Xeno; NbExp=2; IntAct=EBI-359815, EBI-2504426; P31946; P22893: Zfp36; Xeno; NbExp=5; IntAct=EBI-359815, EBI-647803; P31946; Q76353; Xeno; NbExp=3; IntAct=EBI-359815, EBI-6248077;\nSUBCELLULAR LOCATION: Cytoplasm {ECO:0000269|PubMed:17081065}. Melanosome {ECO:0000269|PubMed:17081065}. Note=Identified by mass spectrometry in melanosome fractions from stage I to stage IV.\nSUBCELLULAR LOCATION: Vacuole membrane {ECO:0000269|PubMed:11260479}. Note=(Microbial infection) Upon infection with Chlamydia trachomatis, this protein is associated with the pathogen-containing vacuole membrane where it colocalizes with IncG. {ECO:0000269|PubMed:11260479}.\nALTERNATIVE PRODUCTS: Event=Alternative initiation; Named isoforms=2; Name=Long;   IsoId=P31946-1; Sequence=Displayed; Name=Short;   IsoId=P31946-2; Sequence=VSP_018632;\nPTM: The alpha, brain-specific form differs from the beta form in being phosphorylated. Phosphorylated on Ser-60 by protein kinase C delta type catalytic subunit in a sphingosine-dependent fashion. {ECO:0000250}.\nSIMILARITY: Belongs to the 14-3-3 family. {ECO:0000305}.",
-    # 'created': '2024-04-08T13:50:46.372000', 'dataSources': ['uniprot'], 'displayName': '1433B_HUMAN',
-    # 'domainIds': ['uniprot.P31946', 'ensembl.ENSP00000300161.4', 'ensembl.ENSP00000361930.3'], 'geneName': 'YWHAB',
-     #'sequence': 'MTMDKSELVQKAKLAEQAERYDDMAAAMKAVTEQGHELSNEERNLLSVAYKNVVGARRSSWRVISSIEQKTERNEKKQQMGKEYREKIEAELQDICNDVLELLDKYLIPNATQPESKVFYLKMKGDYFRYLSEVASGDNKQTTVSNSQQAYQEAFEISKKEMQPTHPIRLGLALNFSVFYYEILNSPEKACSLAKTAFDEAIAELDTLNEESYKDSTLIMQLLRDNLTLWTSENQGDEGDAGEGEN',
-     #'synonyms': ['14-3-3 protein beta/alpha', 'Protein 1054', 'Protein kinase C inhibitor protein 1', 'KCIP-1'],
-     #'taxid': 9606, 'type': 'Protein', 'updated': '2024-04-08T13:50:46.372000'}
-    #print(nodeExample.get('primaryDomainId'))
-    #print(nodeExample['domainIds'][0])
-
-    #testProt = Protein(uniprot_id=nodeExample['domainIds'[1]])
-
-
-'''  class Protein(Base):
-        __tablename__ = 'proteins'
-        uniprot_id = Column(String, primary_key=True)
-        sequence = Column(String)
-        gene_entrez_id = Column(String, ForeignKey('genes.entrez_id'))
-        description = Column(String)
-        observation_source = Column(String)
-'''
-    # add_metabolite_data(session, metabo_data_path, obs_source=observations)
-    #retrieve_interacting_proteins_neo4j(protein_test_ids)
+   ## for entry in entries:
+   #     print(entry) add
