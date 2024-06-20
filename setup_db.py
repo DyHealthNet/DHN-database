@@ -423,19 +423,6 @@ if __name__ == '__main__':
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     #add_disorder_data(session, pheno_data_path, obs_source=observations)
     #add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    #add_protein_data(session, protein_data_path, obs_source=observations)
+    add_protein_data(session, protein_data_path, obs_source=observations)
     #add_metabolite_data(session, metabo_data_path, obs_source=observations) | missing the file please upload @elias
-    #proteinIds = read_proteinID_chris(protein_data_path)
-    #prefixed_proteinIds = [f"uniprot.{entry}" for entry in proteinIds]
-    # retrieve_interacting_proteins_neo4j(proteinIds)
-   # assoc_graph = get_edge_associations(set(prefixed_proteinIds), edge_type='protein_interacts_with_protein',direction='undirected')
-   # proteinInteractions = []
-   # for edge in assoc_graph.edges():
-    #    memberOne = edge[0].replace("uniprot.", "")
-     #   memberTwo = edge[1].replace("uniprot.", "")
-      #  proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=memberOne, uniprot_id_memberTwo=memberTwo))
-    #add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
     entries = session.query(ProteinAssocProtein).count() # 1.438.688 entries
-    test =2
-   ## for entry in entries:
-   #     print(entry) add
