@@ -20,12 +20,22 @@ def read_metabolite_mapping(mapping_file) -> pd.DataFrame:
     return pd.read_csv(mapping_file, sep='\t')
 
 
-def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None) -> dict[str, dict]:
+def backcoupled_metabolites_disease(elem, omim_ids):
+    if not omim_ids:
+        return False
+    diseases = elem.findall('diseases/disease/omim_id')
+    return any(f"omim.{omim.text}" in omim_ids for omim in diseases)
+
+
+def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None, omim_ids: set = None) -> dict[
+    str, dict]:
     """
     Read the HMDB data and return a dictionary of relevant metabolites
     :param hmdb_file: str, path to the HMDB file
     :param relevant_ids: set, set of relevant metabolite ids
     :param ext_ref: list, list of external references to extract, must end with '_id'
+    :param omim_ids: optional, list of omim ids for which to extract associated metabolites in addition to
+    the relevant metabolites
     """
     if ext_ref is None:
         ext_ref = ['kegg_id', 'chemspider_id', 'drugbank_id', 'pdb_id', 'wikipedia_id']
@@ -47,7 +57,8 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None)
         # get the accession as well as the secondary accession
         accession = elem.find('accession').text
         secondary_accessions = [sec.text for sec in elem.findall('secondary_accessions/accession')]
-        if not accession in relevant_ids and not any(sec in relevant_ids for sec in secondary_accessions):
+        if ((accession not in relevant_ids and not any(sec in relevant_ids for sec in secondary_accessions)) and
+                not backcoupled_metabolites_disease(elem, omim_ids)):
             root.clear()
             continue
 
@@ -64,7 +75,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None)
         # add secondary accessions to xrefs
         xrefs.extend(secondary_accessions)
         synonyms = [synonym.text for synonym in elem.findall('synonyms/synonym')]
-        proteins = [protein.text for protein in elem.findall('protein_association/protein/uniprot_id')]
+        proteins = [protein.text for protein in elem.findall('protein_associations/protein/uniprot_id')]
         disease_associations = [disease.text for disease in elem.findall('diseases/disease/omim_id')
                                 if disease.text is not None]
         hmdb_info[accession] = {'display_name': display_name,
@@ -91,4 +102,3 @@ def retrieve_assoc_metabolite_nodes(hmdb_mapping):
 if __name__ == '__main__':
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     hmdb_data_path = '../data/hmdb_metabolites.xml'
-
