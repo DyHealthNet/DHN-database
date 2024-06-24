@@ -11,7 +11,7 @@ from models import *
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import read_proteinID_chris, get_protein_nodes, PROTEIN_NODES, PROTEIN_INTERACTIONS
+from protein_mapping import read_proteinID_chris, get_protein_nodes
 
 # create postrgres db engine in memory
 url = url_object = URL.create(
@@ -447,7 +447,7 @@ if __name__ == '__main__':
     # add_disorder_data(session, pheno_data_path, obs_source=observations)
     # add_phenotype_data(session, pheno_data_path, obs_source=observations)
     # add_protein_data(session, protein_data_path, obs_source=observations)
-    add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
 
     # second pass for phenotypes
-    add_phenotype_data(session, pheno_data_path, obs_source='external')
+    # add_phenotype_data(session, pheno_data_path, obs_source='external')
