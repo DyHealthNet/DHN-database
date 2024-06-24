@@ -7,21 +7,19 @@ from models import *
 Session = sessionmaker(bind=engine)
 session = Session()
 
+all_models = [Gene, Protein, Phenotype, Disorder, Metabolite, MetaboliteAssocDisorder, ProteinAssocMetabolite,
+              GeneAssocDisorder, DisorderAssocPhenotype, ProteinAssocProtein, EffectsDisorderDisorder,
+              EffectsMetaboliteDisorder, EffectsMetaboliteMetabolite, EffectsMetabolitePhenotype,
+              EffectsPhenotypeDisorder, EffectsPhenotypePhenotype, EffectsProteinDisorder, EffectsProteinMetabolite,
+              EffectsProteinPhenotype, EffectsProteinProtein,]
+print(len(all_models))
+
 #%%
 # check how many rows are in each table
-genes = session.query(Gene).count()
-proteins = session.query(Protein).count()
-phenotypes = session.query(Phenotype).count()
-disorders = session.query(Disorder).count()
+sum_all = 0
+for model in all_models:
+    count = session.query(model).count()
+    print(f"{model.__name__}: {count}")
+    sum_all += count
 
-f"Genes: {genes}, Proteins: {proteins}, Disorders: {disorders}, Phenotypes: {phenotypes}"
-
-#%%
-# get the edges between each table
-gene_disorder_edges = session.query(GeneAssocDisorder).count()
-disorder_phenotype_edges = session.query(DisorderAssocPhenotype).count()
-protein_assoc_protein_edges = session.query(ProteinAssocProtein).count()
-protein_assoc_gene_edges = session.query(Protein).filter(Protein.gene_entrez_id is not None).count()
-
-(f"Gene-Disorder edges: {gene_disorder_edges}, Disorder-Phenotype edges: {disorder_phenotype_edges}, "
- f"Protein-Protein edges: {protein_assoc_protein_edges}, Protein-Gene edges: {protein_assoc_gene_edges}")
+print(f"Total rows: {sum_all}")

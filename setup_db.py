@@ -340,7 +340,7 @@ def get_additional_diseases(session, obs_source: str = None):
                         SELECT 1
                         FROM unnest(xrefs) AS xref
                         WHERE xref LIKE 'omim.%'
-                    ) AND observation_source == {obs_source};"""
+                    ) AND observation_source = '{obs_source}';"""
     return {x for x in session.execute(text(sql_string)).fetchall() for x in x[0] if x.startswith('omim.')}
 
 
@@ -378,7 +378,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                         .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
 
     add_missing(session, missing_diseases, 'disorders')
-    add_missing(session, missing_proteins, 'proteins')
+    # add_missing(session, missing_proteins, 'proteins')
 
     for metabolite in hmdb_mapping:
         metabolite_name = f"hmdb.{metabolite}"
@@ -444,10 +444,10 @@ if __name__ == '__main__':
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    # add_disorder_data(session, pheno_data_path, obs_source=observations)
-    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    # add_protein_data(session, protein_data_path, obs_source=observations)
-    # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    add_protein_data(session, protein_data_path, obs_source=observations)
+    add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
 
     # second pass for phenotypes
-    # add_phenotype_data(session, pheno_data_path, obs_source='external')
+    add_phenotype_data(session, pheno_data_path, obs_source='external')

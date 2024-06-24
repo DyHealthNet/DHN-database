@@ -161,8 +161,8 @@ def main(session, edges_path, pheno_data_path, protein_data_path, metabo_data_pa
     metabo_map = get_labels(metabolites, 'metabolite')
 
     # format the labels and filter out the ones that do not exist in the database
-    existing_proteins = set(filter_exising_ids(session, Protein.uniprot_id))
-    existing_metabolites = set(filter_exising_ids(session, Metabolite.hmdb_id))
+    existing_proteins = {x[0].split(".")[1] for x in filter_exising_ids(session, Protein.uniprot_id)}
+    existing_metabolites = {x[0].split(".")[1] for x in filter_exising_ids(session, Metabolite.hmdb_id)}
     protein_map = {k: f"uniprot.{v}" for k, v in protein_map.items() if v in existing_proteins}
     metabo_map = {k: f"hmdb.{v}" for k, v in metabo_map.items() if v in existing_metabolites}
     pheno_map, disorder_map = diff_phenotype_disorder(pheno_base_map, session)
