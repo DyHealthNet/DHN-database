@@ -20,8 +20,8 @@ url = url_object = URL.create(
     username="postgres",
     password="password",  # plain (unescaped) text
     host="0.0.0.0",
-    port=9000,
-    database="postgres",
+    port=9852,
+    database="dhn_db",
 )
 engine = create_engine(url)
 
@@ -451,6 +451,7 @@ if __name__ == '__main__':
     add_phenotype_data(session, pheno_data_path, obs_source=observations)
     add_protein_data(session, protein_data_path, obs_source=observations)
     add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    # add the edges calculated from the available data
     add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
