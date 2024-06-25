@@ -5,13 +5,13 @@ services:
     container_name: dhn_db
     image: postgres:latest
     ports:
-      - 9000:5432
+      - 9852:5432
     volumes:
       - DHNpostgres:/var/lib/postgresql/data
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_DB=dhn_db
 
 volumes:
   DHNpostgres:
