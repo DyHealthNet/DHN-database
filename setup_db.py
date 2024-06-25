@@ -12,6 +12,7 @@ from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from protein_mapping import read_proteinID_chris, get_protein_nodes
+from calculated_edges import add_calculated_edges
 
 # create postrgres db engine in memory
 url = url_object = URL.create(
@@ -396,6 +397,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                                                                            mondo_id=omim_mapping[f"omim.{disease}"]))
 
         for protein in hmdb_mapping[metabolite]['proteins']:
+            protein = f"uniprot.{protein}"
             if session.query(Protein).filter_by(uniprot_id=protein).first() is None:
                 continue
             metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
@@ -444,10 +446,12 @@ if __name__ == '__main__':
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    edges_path = '../data/scores.csv'
     add_disorder_data(session, pheno_data_path, obs_source=observations)
     add_phenotype_data(session, pheno_data_path, obs_source=observations)
     add_protein_data(session, protein_data_path, obs_source=observations)
     add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
     add_phenotype_data(session, pheno_data_path, obs_source='external')

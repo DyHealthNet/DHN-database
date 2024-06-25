@@ -113,7 +113,8 @@ def map_edge(edge: tuple[str, str], protein_map: dict, pheno_map: dict, metabo_m
     return (mapped_source, mapped_target), (source_type, target_type)
 
 
-def format_edges(edges: pd.DataFrame, protein_map: dict, phenotype_map: dict, metabolite_map: dict, disorder_map: dict):
+def format_edges(session, edges: pd.DataFrame, protein_map: dict, phenotype_map: dict, metabolite_map: dict,
+                 disorder_map: dict):
     formatted_edges = []
     num_edge_types = {}
     for idx, edge_row in tqdm.tqdm(edges.iterrows(), maxinterval=len(edges), desc="Rows"):
@@ -134,9 +135,13 @@ def format_edges(edges: pd.DataFrame, protein_map: dict, phenotype_map: dict, me
         edge = edge_type(**edge_values)
         formatted_edges.append(edge)
         num_edge_types[edge_type] = num_edge_types.get(edge_type, 0) + 1
+        if idx % 1_000_000 == 0:
+            add_edges(session, formatted_edges)
+            formatted_edges = []
     for edge_type, count in num_edge_types.items():
         print(f"Added {count} edges of type {edge_type}")
-    return formatted_edges
+    add_edges(session, formatted_edges)
+    return
 
 
 def add_edges(session, edges):
@@ -149,7 +154,7 @@ def add_edges(session, edges):
         return False
 
 
-def main(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path):
+def add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path):
     phenotypes = load_files(pheno_data_path)
     proteins = load_files(protein_data_path)
     metabolites = load_files(metabo_data_path)
@@ -167,9 +172,8 @@ def main(session, edges_path, pheno_data_path, protein_data_path, metabo_data_pa
     metabo_map = {k: f"hmdb.{v}" for k, v in metabo_map.items() if v in existing_metabolites}
     pheno_map, disorder_map = diff_phenotype_disorder(pheno_base_map, session)
 
-    # formatted_edges = format_edges(edges, protein_map, pheno_map, metabo_map, disorder_map)
-    formatted_edges = format_edges(edges[edges['pval'] <= 0.05], protein_map, pheno_map, metabo_map, disorder_map)
-    add_edges(session, formatted_edges)
+    format_edges(session, edges, protein_map, pheno_map, metabo_map, disorder_map)
+    # formatted_edges = format_edges(edges[edges['pval'] <= 0.05], protein_map, pheno_map, metabo_map, disorder_map)
 
 
 if __name__ == '__main__':
@@ -189,6 +193,4 @@ if __name__ == '__main__':
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-
-    main(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
