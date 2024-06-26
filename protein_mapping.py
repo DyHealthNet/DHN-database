@@ -27,6 +27,38 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
             )
             protein_set.append(protein)
     return protein_set
+
+def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = None) -> list[dict]:
+    print("len(ids):", len(entrez_ids))
+    variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids_list, edge_type='variant_affects_gene',
+                                                       direction='directed')  # Graph with 1511628 nodes and 1539719 edges
+    test = 1
+    # print(entrez_ids)
+    # entrez_id = variant_affects_gene_graph['entrez_id']
+    # variant_primaryDomainId = variant_affects_gene_graph['variant_primaryDomainId']
+    print(type(variant_affects_gene_graph))
+    variant_primaryDomainId_list = []
+    entrez_id_list = []
+    for edge in variant_affects_gene_graph.edges(data=True):
+        variant_primaryDomainId = edge[0]
+        entrez_id = edge[1]
+    test = 2
+    protein_set = []
+    for node in iter_edges('variant_affects_gene'):
+        # Remove the 'uniprot.' prefix from node primaryDomainId
+        primary_domain_id = node['primaryDomainId']
+        if primary_domain_id.replace('uniprot.', '') in uniprot_ids:
+            protein = Protein(
+                uniprot_id= str(primary_domain_id),
+                gene_entrez_id=str(node.get('geneName')),
+                sequence=str(node.get('sequence')),
+                description=str(node.get('comments')),
+                observation_source=observation_source
+            )
+            protein_set.append(protein)
+    return protein_set
+
+
 def read_proteinID_chris(proteinID_path: str) :
     """
     reads Protein IDs from Chris dataset
