@@ -16,8 +16,8 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
     protein_set = []
     for node in iter_nodes('protein'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
-        primary_domain_id = node['primaryDomainId'].replace('uniprot.', '')
-        if primary_domain_id in uniprot_ids:
+        primary_domain_id = node['primaryDomainId']
+        if primary_domain_id.replace('uniprot.', '') in uniprot_ids:
             protein = Protein(
                 uniprot_id= str(primary_domain_id),
                 gene_entrez_id=str(node.get('geneName')),
