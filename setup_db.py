@@ -1,5 +1,6 @@
 import os
 
+import nedrex.core
 import networkx as nx
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
@@ -13,6 +14,9 @@ from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_
 from protein_mapping import read_proteinID_chris, get_protein_nodes, retrieve_interacting_proteins_neo4j
 from sqlalchemy import create_engine, MetaData, create_engine, inspect, Table
 from sqlalchemy.ext.declarative import declarative_base
+from nedrex.core import iter_nodes, iter_edges
+
+
 
 # create postrgres db engine in memory
 url = url_object = URL.create(
@@ -410,8 +414,7 @@ def add_missing(session, data, node_type):
 
 
 if __name__ == '__main__':
-    #Base.metadata.drop_all(engine)
-
+    Base.metadata.drop_all(engine)
     # cohort study
     observations = "CHRIS"
     # Define a session
@@ -423,6 +426,16 @@ if __name__ == '__main__':
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     #add_disorder_data(session, pheno_data_path, obs_source=observations)
     #add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    add_protein_data(session, protein_data_path, obs_source=observations)
+    #add_protein_data(session, protein_data_path, obs_source=observations)
     #add_metabolite_data(session, metabo_data_path, obs_source=observations) | missing the file please upload @elias
-    entries = session.query(ProteinAssocProtein).count() # 1.438.688 entries
+    #entries = session.query(ProteinAssocProtein).count() # 1.438.688 entries
+    variants = nedrex.core.get_edge_types()
+    genomic_variants = nedrex.core.get_edges(edge_type='variant_affects_gene')
+    print(genomic_variant)
+    #offset= 2895044)
+    genomic_variant_iterator = next(genomic_variant)
+    print(genomic_variant_iterator)
+
+
+    test = 2
+'clinvar.2205837'

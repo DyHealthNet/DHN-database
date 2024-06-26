@@ -73,7 +73,23 @@ class ProteinAssocProtein(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     uniprot_id_memberOne = Column(String)
     uniprot_id_memberTwo = Column(String)
-
+class genomic_variant(Base):
+    __tablename__ = "genomic_variant"
+    variant_primaryDomainId=Column(String, primary_key=True) #linvar.17735
+    alternativeSequence = Column(String) #'T',
+    chromosome= Column(String) # 'NW_009646201.1',
+    created =Column(String) # '2024-06-17T12:36:21.275000'
+    dataSources= Column(String) #['clinvar'],
+    domainIds=Column(String) #['clinvar.17735', 'dbsnp.1556058284']
+    position=Column(String) #83614,
+    referenceSequence=Column(String)# 'TC',
+    type = Column(String) # 'GenomicVariant'
+    variantType = Column(String) #'Deletion'}
+class variant_affects_gene(Base):
+    __tablename__ = 'variant_affects_gene'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    variant = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
+    entrez_id = Column(String, ForeignKey('genes.entrez_id'))
 
 class ProteinAssocMetabolite(Base):
     __tablename__ = 'protein_associates_metabolites'

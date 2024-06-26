@@ -6,7 +6,8 @@ from nedrex.core import iter_nodes, iter_edges
 from nedrex.core import api_keys_active, get_api_key
 
 
-nedrex.config.set_url_base("https://api.nedrex.net/open/")
+#nedrex.config.set_url_base("https://api.nedrex.net/open/")
+nedrex.config.set_url_base(" https://apps.cosy.bio/licensed")
 if api_keys_active():
     api_key = get_api_key(accept_eula=True)
     nedrex.config.set_api_key(api_key)
