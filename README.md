@@ -10,7 +10,7 @@ Before you can run the script, you need to ensure the following:
 - (tbd)
 - you need to download the data from the HMDB database and place it in the data folder before 
   running the setup as this can not be done automatically
-##Build &start Docker image
+## Build &start Docker image
 
 ```bash
 docker compose up --build
@@ -18,7 +18,7 @@ docker compose up --build
 ```bash
 docker compose up -d
 ```
-##End Docker image
+## End Docker image
 ```bash
 docker compose down -v
 ```
