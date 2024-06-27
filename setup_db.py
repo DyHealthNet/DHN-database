@@ -14,7 +14,7 @@ from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from protein_mapping import read_proteinID_chris, get_protein_nodes
 from calculated_edges import add_calculated_edges
-
+from testcases import *
 # create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
@@ -329,7 +329,10 @@ def get_protein_interactions(proteinIds):
                                         direction='undirected')
     proteinInteractions = []
     for edge in assoc_graph.edges():
-        proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=edge[0], uniprot_id_memberTwo=edge[1]))
+        uniprot_id_memberOne = edge[0]
+        uniprot_id_memberTwo = edge[1]
+        if(uniprot_id_memberTwo or uniprot_id_memberOne in proteinIds):
+            proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne, uniprot_id_memberTwo))
     return proteinInteractions
 
 
@@ -481,9 +484,16 @@ def countEntries(session, metadata):
         print(f"Table {table_name} has {count} rows.")
 
 
+def testingSetup(session):
+    protein = test_protein()
+    gene = test_gene()
+    genomicVariant = test_variant()
+    interactions = test_proteinAssocProtein(5)
+    test = 2
+
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
-    # Base.metadata.drop_all(engine)
+    Base.metadata.drop_all(engine)
     # cohort study
     observations = "CHRIS"
     # Define a session
@@ -498,16 +508,21 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     edges_path = '../data/scores.csv'
-    add_disorder_data(session, pheno_data_path, obs_source=observations)
-    add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    add_protein_data(session, protein_data_path, obs_source=observations)
-    add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    testingSetup(session)
+    #add_disorder_data(session, pheno_data_path, obs_source=observations)
+    #add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    #gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
+
+    #add_protein_data(session, protein_data_path, obs_source=observations)
+    #add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
     # add the edges calculated from the available data
-    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    #add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
-    add_phenotype_data(session, pheno_data_path, obs_source='external')
-    gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
+    #add_phenotype_data(session, pheno_data_path, obs_source='external')
+    #gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
     # gene_ids_replaced = [x.replace('entrez.', '') for x in gene_ids]
-    add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
     countEntries(session, metadata)
+
+
+
