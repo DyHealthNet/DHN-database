@@ -315,7 +315,7 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    proteinNodes = get_protein_nodes(proteinIds[1:10], obs_source)
     proteinInteractions = get_protein_interactions(proteinIds)
     add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
     add_items(session, proteinNodes, Protein, ['uniprot_id'])
@@ -505,8 +505,8 @@ if __name__ == '__main__':
     #add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
     # second pass for phenotypes
     #add_phenotype_data(session, pheno_data_path, obs_source='external')
-    #gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
+    gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
     #gene_ids_replaced = [x.replace('entrez.', '') for x in gene_ids]
-    #add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
+    add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
     countEntries(session, metadata)
 
