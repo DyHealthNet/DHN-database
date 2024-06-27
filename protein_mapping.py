@@ -67,40 +67,6 @@ def read_proteinID_chris(proteinID_path: str) :
     return df['UniProt'].unique()
 
 
-
-
-
-def get_edge_associations2(node_ids: set[str], edge_type):
-    """
-    Fetches all edges of a certain type that are associated with a set of node ids
-    :param edge_type: type of edge to fetch
-    :param node_ids: set of node ids to fetch edges for (i.e. mondo ids)
-    :return: networkx graph with all mondo ids and associated genes
-    """
-    sourceDomainId = "sourceDomainId"
-    targetDomainId = "targetDomainId"
-    if(edge_type == "protein_interacts_with_protein"):
-        sourceDomainId = "memberOne"
-        targetDomainId = "memberTwo"
-        edges = [e for e in iter_edges(edge_type) if e['memberOne'] in node_ids or e['memberTwo'] in node_ids]
-        G = nx.Graph()
-        for association in edges:
-            G.add_edge(association['memberOne'], association['memberTwo'], source=association['dataSources'])
-        return G
-
-
-
-
-def add_proteinSet_data(session, protein_data_path):
-    proteinData = read_proteinID_chris(protein_data_path)
-    proteinSet = set(proteinData)
-    associationsType = list["protein_encoded_by",
-                            "protein_has_signature",
-                            "protein_in_pathway",
-                            "protein_interacts_with_protein",
-                            "protein_similarity_protein"]
-
-
 def retrieve_interacting_proteins_neo4j(protein_ids):
     # Constructing a string of protein IDs for the Cypher query
     protein_id_string = ', '.join([f'"{protein_id}"' for protein_id in protein_ids])

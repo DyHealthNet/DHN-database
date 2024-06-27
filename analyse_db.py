@@ -11,7 +11,7 @@ all_models = [Gene, Protein, Phenotype, Disorder, Metabolite, MetaboliteAssocDis
               GeneAssocDisorder, DisorderAssocPhenotype, ProteinAssocProtein, EffectsDisorderDisorder,
               EffectsMetaboliteDisorder, EffectsMetaboliteMetabolite, EffectsMetabolitePhenotype,
               EffectsPhenotypeDisorder, EffectsPhenotypePhenotype, EffectsProteinDisorder, EffectsProteinMetabolite,
-              EffectsProteinPhenotype, EffectsProteinProtein,]
+              EffectsProteinPhenotype, EffectsProteinProtein, Genomic_variant, Variant_affects_gene]
 print(len(all_models))
 
 #%%
