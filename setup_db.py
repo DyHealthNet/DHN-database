@@ -314,7 +314,7 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds[1:3], obs_source)
+    proteinNodes = get_protein_nodes(proteinIds, obs_source)
     print("Got protein nodes")
     proteinInteractions = get_protein_interactions(proteinIds)
     add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
@@ -498,16 +498,16 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     edges_path = '../data/scores.csv'
-    # add_disorder_data(session, pheno_data_path, obs_source=observations)
-    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    add_phenotype_data(session, pheno_data_path, obs_source=observations)
     add_protein_data(session, protein_data_path, obs_source=observations)
-    # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
     # add the edges calculated from the available data
-    # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
-    # add_phenotype_data(session, pheno_data_path, obs_source='external')
-    # gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
+    add_phenotype_data(session, pheno_data_path, obs_source='external')
+    gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
     # gene_ids_replaced = [x.replace('entrez.', '') for x in gene_ids]
-    # add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
+    add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
     countEntries(session, metadata)
