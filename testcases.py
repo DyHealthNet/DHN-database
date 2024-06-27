@@ -1,4 +1,4 @@
-from nedrex.core import iter_edges
+from nedrex.core import iter_edges, iter_nodes
 
 from models import *
 
@@ -47,15 +47,26 @@ def test_phenotype():
     )
     return(phenotype)
 
-def test_protein():
-    protein = Protein(
-        uniprot_id="P12345",
-        sequence="MSEQENCE",
-        gene_entrez_id="entrez.1",
-        description="Test Protein",
-        observation_source="Test Source"
-    )
-    return(protein)
+def test_protein(NoOfProteins):
+    observation_source = 'CHRIS'
+    counter= 0
+    protein_set = []
+    for node in iter_nodes('protein'):
+        # Remove the 'uniprot.' prefix from node primaryDomainId
+        primary_domain_id = node['primaryDomainId']
+        protein = Protein(
+            uniprot_id=str(primary_domain_id),
+            gene_entrez_id=str(node.get('geneName')),
+            sequence=str(node.get('sequence')),
+            description=str(node.get('comments')),
+            observation_source=observation_source
+        )
+        protein_set.append(protein)
+        counter += 1
+        if counter == NoOfProteins:
+            break
+    return protein_set
+
 
 def test_metabolite():
     metabolite = Metabolite(

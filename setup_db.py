@@ -485,7 +485,7 @@ def countEntries(session, metadata):
 
 
 def testingSetup(session):
-    protein = test_protein()
+    protein = test_protein(5)
     gene = test_gene()
     genomicVariant = test_variant()
     interactions = test_proteinAssocProtein(5)
