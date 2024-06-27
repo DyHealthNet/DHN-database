@@ -74,30 +74,31 @@ class ProteinAssocProtein(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     uniprot_id_memberOne = Column(String)
     uniprot_id_memberTwo = Column(String)
+
+
 class Genomic_variant(Base):
     __tablename__ = "genomic_variant"
-    variant_primaryDomainId=Column(String, primary_key=True) #linvar.17735
-    alternativeSequence = Column(String) #'T',
-    chromosome= Column(String) # 'NW_009646201.1',
-    created =Column(String) # '2024-06-17T12:36:21.275000'
-    dataSources= Column(String) #['clinvar'],
-    domainIds=Column(String) #['clinvar.17735', 'dbsnp.1556058284']
-    position=Column(String) #83614,
-    referenceSequence=Column(String)# 'TC',
-    type = Column(String) # 'GenomicVariant'
-    variantType = Column(String) #'Deletion'}
+    variant_primaryDomainId = Column(String, primary_key=True)  #linvar.17735
+    alternativeSequence = Column(String)  #'T',
+    chromosome = Column(String)  # 'NW_009646201.1',
+    created = Column(String)  # '2024-06-17T12:36:21.275000'
+    dataSources = Column(String)  #['clinvar'],
+    domainIds = Column(String)  #['clinvar.17735', 'dbsnp.1556058284']
+    position = Column(String)  #83614,
+    referenceSequence = Column(String)  # 'TC',
+    type = Column(String)  # 'GenomicVariant'
+    variantType = Column(String)  #'Deletion'}
+
+
 class Variant_affects_gene(Base):
     __tablename__ = 'variant_affects_gene'
-    variant_primaryDomainId = Column(Integer,primary_key=True, autoincrement=True)
+    variant_primaryDomainId = Column(Integer, primary_key=True, autoincrement=True)
     genomic_variant = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
     entrez_id = Column(String, ForeignKey('genes.entrez_id'))
-   # type = Column(String)
+
+
+# type = Column(String)
 #{'created': '2024-06-23T21:22:51.581000', 'dataSources': ['clinvar'], 'sourceDomainId': 'clinvar.2205837', 'targetDomainId': 'entrez.79501', 'type': 'VariantAffectsGene', 'updated': '2024-06-23T21:22:51.581000'}
-
-
-
-
-
 
 
 class ProteinAssocMetabolite(Base):
