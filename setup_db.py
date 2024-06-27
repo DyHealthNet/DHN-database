@@ -314,7 +314,7 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    proteinNodes = get_protein_nodes(proteinIds[1:3], obs_source)
     print("Got protein nodes")
     proteinInteractions = get_protein_interactions(proteinIds)
     add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
@@ -323,9 +323,9 @@ def add_protein_data(session, proteinData_path, obs_source):
 
 
 def get_protein_interactions(proteinIds):
-    prefixed_proteinIds = [f"uniprot.{entry}" for entry in proteinIds]
+    #prefixed_proteinIds = [f"uniprot.{entry}" for entry in proteinIds]
     # retrieve_interacting_proteins_neo4j(proteinIds)
-    assoc_graph = get_edge_associations(set(prefixed_proteinIds), edge_type='protein_interacts_with_protein',
+    assoc_graph = get_edge_associations(set(proteinIds), edge_type='protein_interacts_with_protein',
                                         direction='undirected')
     proteinInteractions = []
     for edge in assoc_graph.edges():
@@ -426,7 +426,7 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     pattern = r'^[^.]*\.'
     variants_to_add = []
     for node in genomic_variant_node_generator:
-        if node['primaryDomainId'].replace(pattern, '') in variant_primaryDomainId_list:
+        if node['primaryDomainId'] in variant_primaryDomainId_list:
             newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
                                          alternativeSequence=node['alternativeSequence'],  #'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',

@@ -17,7 +17,7 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
     for node in iter_nodes('protein'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
         primary_domain_id = node['primaryDomainId']
-        if primary_domain_id.replace('uniprot.', '') in uniprot_ids:
+        if primary_domain_id in uniprot_ids:
             protein = Protein(
                 uniprot_id= str(primary_domain_id),
                 gene_entrez_id=str(node.get('geneName')),
@@ -47,7 +47,7 @@ def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = 
     for node in iter_edges('variant_affects_gene'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
         primary_domain_id = node['primaryDomainId']
-        if primary_domain_id.replace('uniprot.', '') in uniprot_ids:
+        if primary_domain_id in uniprot_ids:
             protein = Protein(
                 uniprot_id= str(primary_domain_id),
                 gene_entrez_id=str(node.get('geneName')),
