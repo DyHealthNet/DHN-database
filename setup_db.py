@@ -1,5 +1,4 @@
 import os
-from typing import re
 
 import networkx as nx
 from nedrex.core import iter_edges, iter_nodes, get_nodes, get_collection_attributes, get_edge_types
@@ -23,7 +22,7 @@ url = url_object = URL.create(
     password="password",  # plain (unescaped) text
     host="0.0.0.0",
     port=9852,
-    database="dhn_db",
+    database="postgres",
 )
 engine = create_engine(url)
 
@@ -315,7 +314,8 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds[1:10], obs_source)
+    proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    print("Got protein nodes")
     proteinInteractions = get_protein_interactions(proteinIds)
     add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
     add_items(session, proteinNodes, Protein, ['uniprot_id'])
@@ -329,9 +329,7 @@ def get_protein_interactions(proteinIds):
                                         direction='undirected')
     proteinInteractions = []
     for edge in assoc_graph.edges():
-        memberOne = edge[0].replace("uniprot.", "")
-        memberTwo = edge[1].replace("uniprot.", "")
-        proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=memberOne, uniprot_id_memberTwo=memberTwo))
+        proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=edge[0], uniprot_id_memberTwo=edge[1]))
     return proteinInteractions
 
 
@@ -412,6 +410,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
 
+
 def add_genomic_variants(session, entrez_ids: set[str] = None, observation_source: str = None) -> list[dict]:
     genomic_variant_node_generator = iter_nodes('genomic_variant')
     variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
@@ -427,23 +426,23 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     pattern = r'^[^.]*\.'
     variants_to_add = []
     for node in genomic_variant_node_generator:
-        if node['primaryDomainId'].replace(pattern,'') in variant_primaryDomainId_list:
-            newVariant = Genomic_variant( variant_primaryDomainId= node['primaryDomainId'], #linvar.17735
-                                            alternativeSequence = node['alternativeSequence'], #'T',
-                                            chromosome = node['chromosome'], # 'NW_009646201.1',
-                                            created = node['created'],# '2024-06-17T12:36:21.275000'
-                                            dataSources = node['dataSources'], #['clinvar'],
-                                            domainIds = node['domainIds'] ,#['clinvar.17735', 'dbsnp.1556058284']
-                                            position = node['position'], #83614,
-                                            referenceSequence= node['referenceSequence'],# 'TC',
-                                            type = node['type'], # 'GenomicVariant'
-                                            variantType = node['variantType']) #'Deletion'})
+        if node['primaryDomainId'].replace(pattern, '') in variant_primaryDomainId_list:
+            newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
+                                         alternativeSequence=node['alternativeSequence'],  #'T',
+                                         chromosome=node['chromosome'],  # 'NW_009646201.1',
+                                         created=node['created'],  # '2024-06-17T12:36:21.275000'
+                                         dataSources=node['dataSources'],  #['clinvar'],
+                                         domainIds=node['domainIds'],  #['clinvar.17735', 'dbsnp.1556058284']
+                                         position=node['position'],  #83614,
+                                         referenceSequence=node['referenceSequence'],  # 'TC',
+                                         type=node['type'],  # 'GenomicVariant'
+                                         variantType=node['variantType'])  #'Deletion'})
             variants_to_add.append(newVariant)
-    add_items(session, variants_to_add,Genomic_variant, filter_args=['variant_primaryDomainId'])
+    add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     variant_affects_gene_to_add = []
     for variant, gene in variant_affects_gene_dict.items():
-        variant_affects_gene_to_add.append(Variant_affects_gene( genomic_variant = variant, entrez_id = gene))
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, ['genomic_variant','entrez_id'])
+        variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, ['genomic_variant', 'entrez_id'])
     session.commit()
     return
 
@@ -470,9 +469,10 @@ def add_missing(session, data, node_type):
     print(f"Got {len(data)} missing {node_type} to add to the database.")
     valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
-def countEntries(session,metadata):
+
+def countEntries(session, metadata):
     table_counts = {}
-# Iterate over each table in the metadata
+    # Iterate over each table in the metadata
     for table_name in metadata.tables:
         table = Table(table_name, metadata, autoload_with=engine)
         count = session.query(table).count()
@@ -480,8 +480,9 @@ def countEntries(session,metadata):
     for table_name, count in table_counts.items():
         print(f"Table {table_name} has {count} rows.")
 
+
 if __name__ == '__main__':
-   # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
+    # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Base.metadata.drop_all(engine)
     # cohort study
     observations = "CHRIS"
@@ -497,16 +498,16 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     edges_path = '../data/scores.csv'
-    #add_disorder_data(session, pheno_data_path, obs_source=observations)
-    #add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    # add_disorder_data(session, pheno_data_path, obs_source=observations)
+    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
     add_protein_data(session, protein_data_path, obs_source=observations)
-    #add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
+    # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
     # add the edges calculated from the available data
-    #add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-    # second pass for phenotypes
-    #add_phenotype_data(session, pheno_data_path, obs_source='external')
-    gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
-    #gene_ids_replaced = [x.replace('entrez.', '') for x in gene_ids]
-    add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
-    countEntries(session, metadata)
+    # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
+    # second pass for phenotypes
+    # add_phenotype_data(session, pheno_data_path, obs_source='external')
+    # gene_ids = [row[0] for row in session.query(Gene.entrez_id).all()]
+    # gene_ids_replaced = [x.replace('entrez.', '') for x in gene_ids]
+    # add_genomic_variants(session,observation_source=observations, entrez_ids=gene_ids)
+    countEntries(session, metadata)

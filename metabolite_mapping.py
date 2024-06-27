@@ -27,8 +27,8 @@ def backcoupled_metabolites_disease(elem, omim_ids):
     return any(f"omim.{omim.text}" in omim_ids for omim in diseases)
 
 
-def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None, omim_ids: set = None) -> dict[
-    str, dict]:
+def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
+                   omim_ids: set = None) -> dict[str, dict]:
     """
     Read the HMDB data and return a dictionary of relevant metabolites
     :param hmdb_file: str, path to the HMDB file
