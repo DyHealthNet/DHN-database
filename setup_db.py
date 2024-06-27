@@ -443,7 +443,7 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     variant_affects_gene_to_add = []
     for variant, gene in variant_affects_gene_dict.items():
         variant_affects_gene_to_add.append(Variant_affects_gene( genomic_variant = variant, entrez_id = gene))
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, ['genomic_variant'])
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, ['genomic_variant','entrez_id'])
     session.commit()
     return
 
@@ -472,6 +472,7 @@ def add_missing(session, data, node_type):
 
 
 if __name__ == '__main__':
+    Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Base.metadata.drop_all(engine)
     # cohort study
     observations = "CHRIS"
@@ -483,6 +484,8 @@ if __name__ == '__main__':
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     edges_path = '../data/scores.csv'
+
+
     #add_disorder_data(session, pheno_data_path, obs_source=observations)
     #add_phenotype_data(session, pheno_data_path, obs_source=observations)
     #add_protein_data(session, protein_data_path, obs_source=observations)
