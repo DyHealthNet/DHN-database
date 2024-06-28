@@ -421,9 +421,10 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
     variant_primaryDomainId_list = []
     variant_affects_gene_dict = {}
+    clinvar_ids = {}
     for edge in variant_affects_gene_graph.edges(data=True):
         variant_primaryDomainId = edge[0]
-        entrez_id = edge[1]
+        clinvar_ids.add(edge[1])
 
         variant_primaryDomainId_list.append(variant_primaryDomainId)
         variant_affects_gene_dict[variant_primaryDomainId] = entrez_id,
@@ -431,7 +432,7 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     variants_to_add = []
     genomic_variant_node_generator = iter_nodes('genomic_variant')
     for node in genomic_variant_node_generator:
-        if node['primaryDomainId'] in variant_primaryDomainId_list:
+        if node['primaryDomainId'] in clinvar_ids:
             newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
                                          alternativeSequence=node['alternativeSequence'],  #'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',
@@ -443,6 +444,7 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
                                          type=node['type'],  # 'GenomicVariant'
                                          variantType=node['variantType'])  #'Deletion'})
             variants_to_add.append(newVariant)
+            break
     add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     variant_affects_gene_to_add = []
     for variant, gene in variant_affects_gene_dict.items():
