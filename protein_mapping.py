@@ -14,6 +14,7 @@ from models import Protein
 def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> list[dict]:
     print("UniProt IDs:", uniprot_ids)
     protein_set = []
+    uniprot_ids = {f"uniprot.{uniprot_id}" for uniprot_id in uniprot_ids}
     for node in iter_nodes('protein'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
         primary_domain_id = node['primaryDomainId']

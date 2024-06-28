@@ -72,8 +72,8 @@ class DisorderAssocPhenotype(Base):
 class ProteinAssocProtein(Base):
     __tablename__ = 'protein_associates_proteins'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    uniprot_id_memberOne = Column(String)
-    uniprot_id_memberTwo = Column(String)
+    uniprot_id_memberOne = Column(String, ForeignKey('proteins.uniprot_id'))
+    uniprot_id_memberTwo = Column(String, ForeignKey('proteins.uniprot_id'))
 
 
 class Genomic_variant(Base):
