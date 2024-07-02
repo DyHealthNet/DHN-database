@@ -419,20 +419,19 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
                                                        direction='directed')  # Graph with 1511628 nodes and 1539719 edges
     print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
-    variant_primaryDomainId_list = []
     variant_affects_gene_dict = {}
-    clinvar_ids = {}
+    clinvar_ids = []
     for edge in variant_affects_gene_graph.edges(data=True):
         variant_primaryDomainId = edge[0]
-        clinvar_ids.add(edge[1])
+        clinvar_ids.append(edge[1])
 
-        variant_primaryDomainId_list.append(variant_primaryDomainId)
-        variant_affects_gene_dict[variant_primaryDomainId] = entrez_id,
+        variant_affects_gene_dict[variant_primaryDomainId] = edge[1]
     pattern = r'^[^.]*\.'
     variants_to_add = []
     genomic_variant_node_generator = iter_nodes('genomic_variant')
     for node in genomic_variant_node_generator:
         if node['primaryDomainId'] in clinvar_ids:
+            test= node['primaryDomainId']
             newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
                                          alternativeSequence=node['alternativeSequence'],  #'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',
@@ -447,9 +446,11 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
             break
     add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     variant_affects_gene_to_add = []
+    genes = []
     for variant, gene in variant_affects_gene_dict.items():
-        variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, ['genomic_variant', 'entrez_id'])
+        if(variant in clinvar_ids and gene in entrez_ids):
+            variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'genomic_variant'])
     session.commit()
     return
 
@@ -514,7 +515,7 @@ if __name__ == '__main__':
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     edges_path = '../data/scores.csv'
     # testingSetup(session)
-    # add_disorder_data(session, pheno_data_path, obs_source=observations)
+    #add_disorder_data(session, pheno_data_path, obs_source=observations)
     # add_phenotype_data(session, pheno_data_path, obs_source=observations)
 
     # add_protein_data(session, protein_data_path, obs_source=observations)
@@ -523,7 +524,7 @@ if __name__ == '__main__':
     gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
     # gene_ids_replaced = {x.replace('entrez.', '') for x in gene_ids}
     add_genomic_variants(session, gene_ids, observation_source='external')
-    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+   # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
     # add_phenotype_data(session, pheno_data_path, obs_source='external')
