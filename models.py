@@ -78,7 +78,7 @@ class ProteinAssocProtein(Base):
 
 class Genomic_variant(Base):
     __tablename__ = "genomic_variant"
-    variant_primaryDomainId = Column(String, primary_key=True)  #linvar.17735
+    variant_primaryDomainId = Column(String, primary_key=True)  #clinvar.17735
     alternativeSequence = Column(String)  #'T',
     chromosome = Column(String)  # 'NW_009646201.1',
     created = Column(String)  # '2024-06-17T12:36:21.275000'

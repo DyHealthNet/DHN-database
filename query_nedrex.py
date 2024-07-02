@@ -98,8 +98,8 @@ def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_di
     else:
         raise ValueError(f"Direction {direction} not supported")
 
-    # edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
-
+    edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
+    '''
     edges =[]
     count = 0
     for edge in iter_edges(edge_type):
@@ -108,7 +108,7 @@ def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_di
         if edge[first_node] in node_ids or edge[second_node] in node_ids:
             edges.append(edge)
             count += 1
-
+    '''
     G = nx.Graph()
     for association in edges:
         G.add_edge(association[first_node], association[second_node], source=association['dataSources'])
@@ -128,6 +128,11 @@ def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     print(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
     snomeds = set([f"snomedct.{snomed}" for snomed in snomeds if snomed != "nan"])
     return snomeds
+
+def get_variants_neddrex(variants_path: str):
+    df = pd.read_csv(variants_path, sep='\t')
+
+
 
 
 if __name__ == '__main__':
