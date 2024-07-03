@@ -15,15 +15,18 @@ from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_
 from protein_mapping import read_proteinID_chris, get_protein_nodes
 from calculated_edges import add_calculated_edges
 from testcases import *
+import dotenv
+
+dotenv.load_dotenv()
 
 # create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
-    username="postgres",
-    password="password",  # plain (unescaped) text
-    host="0.0.0.0",
-    port=9852,
-    database="postgres",
+    username=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD"),  # plain (unescaped) text
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    database=os.getenv("DB_NAME"),
 )
 engine = create_engine(url)
 
@@ -487,6 +490,7 @@ def countEntries(session, metadata):
         table_counts[table_name] = count
     for table_name, count in table_counts.items():
         print(f"Table {table_name} has {count} rows.")
+    print("Total number of rows in the database: ", sum(table_counts.values()))
 
 
 def testingSetup(session):
@@ -499,21 +503,22 @@ def testingSetup(session):
 
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
-    Base.metadata.drop_all(engine)
+    # Base.metadata.drop_all(engine)
     # cohort study
-    observations = "CHRIS"
+    observations = os.getenv("OBSERVATION_SOURCE")
     # Define a session
     Session = sessionmaker(bind=engine)
     session = Session()
     metadata = MetaData()
 
-    #Reflect the tables
+    # Reflect the tables
     metadata.reflect(bind=engine)
     create_tables()
-    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    edges_path = '../data/scores.csv'
+
+    pheno_data_path = os.getenv("PHENOTYPE_PATH")
+    protein_data_path = os.getenv("PROTEIN_PATH")
+    metabo_data_path = os.getenv("METABOLITE_PATH")
+    edges_path = os.getenv("CALCULATED_EDGES_PATH")
     # testingSetup(session)
     add_disorder_data(session, pheno_data_path, obs_source=observations)
     add_phenotype_data(session, pheno_data_path, obs_source=observations)
