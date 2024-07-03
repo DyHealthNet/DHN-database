@@ -92,7 +92,7 @@ class Genomic_variant(Base):
 
 class Variant_affects_gene(Base):
     __tablename__ = 'variant_affects_gene'
-    variant_primaryDomainId = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     genomic_variant = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
     entrez_id = Column(String, ForeignKey('genes.entrez_id'))
 

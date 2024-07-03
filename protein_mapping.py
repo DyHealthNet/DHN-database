@@ -11,7 +11,7 @@ from query_nedrex import get_disorder_data, domain_id_to_mondo, get_needed_snome
 from nedrex.core import iter_nodes, iter_edges
 from models import Protein
 
-def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> list[dict]:
+def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> list[Protein]:
     print("UniProt IDs:", uniprot_ids)
     protein_set = []
     uniprot_ids = {f"uniprot.{uniprot_id}" for uniprot_id in uniprot_ids}
