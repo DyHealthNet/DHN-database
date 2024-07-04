@@ -518,7 +518,7 @@ if __name__ == '__main__':
     #add_disorder_data(session, pheno_data_path, obs_source=observations)
     # add_phenotype_data(session, pheno_data_path, obs_source=observations)
 
-     add_protein_data(session, protein_data_path, obs_source=observations)
+    #add_protein_data(session, protein_data_path, obs_source=observations)
     # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
     # add the edges calculated from the available data
     gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
