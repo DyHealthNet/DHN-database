@@ -15,14 +15,18 @@ from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_
 from protein_mapping import read_proteinID_chris, get_protein_nodes
 from calculated_edges import add_calculated_edges
 from testcases import *
+import dotenv
+
+dotenv.load_dotenv()
+
 # create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
-    username="postgres",
-    password="password",  # plain (unescaped) text
-    host="0.0.0.0",
-    port=9852,
-    database="postgres",
+    username=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD"),  # plain (unescaped) text
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    database=os.getenv("DB_NAME"),
 )
 engine = create_engine(url)
 
@@ -315,23 +319,24 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
     proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    available_proteins = {x.uniprot_id for x in proteinNodes}
     print(f"Got {len(proteinNodes)} protein nodes")
-    proteinInteractions = get_protein_interactions(proteinIds)
-    add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
+    proteinInteractions = get_protein_interactions(available_proteins)
     add_items(session, proteinNodes, Protein, ['uniprot_id'])
+    add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
     session.commit()
 
 
 def get_protein_interactions(proteinIds):
-    prefixed_proteinIds = {f"uniprot.{entry}" for entry in proteinIds}
+    # prefixed_proteinIds = {f"uniprot.{entry}" for entry in proteinIds}
     # retrieve_interacting_proteins_neo4j(proteinIds)
-    assoc_graph = get_edge_associations(prefixed_proteinIds, edge_type='protein_interacts_with_protein',
+    assoc_graph = get_edge_associations(proteinIds, edge_type='protein_interacts_with_protein',
                                         direction='undirected')
     proteinInteractions = []
     for edge in assoc_graph.edges():
         uniprot_id_memberOne = edge[0]
         uniprot_id_memberTwo = edge[1]
-        if(uniprot_id_memberTwo or uniprot_id_memberOne in proteinIds):
+        if(uniprot_id_memberTwo in proteinIds and uniprot_id_memberOne in proteinIds):
             proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=uniprot_id_memberOne,
                                                            uniprot_id_memberTwo=uniprot_id_memberTwo))
     return proteinInteractions
@@ -420,18 +425,16 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
                                                        direction='directed')  # Graph with 1511628 nodes and 1539719 edges
     print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
     variant_affects_gene_dict = {}
-    clinvar_ids = []
+    clinvar_ids = set()
     for edge in variant_affects_gene_graph.edges(data=True):
-        variant_primaryDomainId = edge[0]
-        clinvar_ids.append(edge[1])
+        clinvar_ids.add(edge[0])
+        variant_affects_gene_dict[edge[0]] = edge[1]
 
-        variant_affects_gene_dict[variant_primaryDomainId] = edge[1]
     pattern = r'^[^.]*\.'
     variants_to_add = []
     genomic_variant_node_generator = iter_nodes('genomic_variant')
     for node in genomic_variant_node_generator:
         if node['primaryDomainId'] in clinvar_ids:
-            test= node['primaryDomainId']
             newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
                                          alternativeSequence=node['alternativeSequence'],  #'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',
@@ -443,16 +446,16 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
                                          type=node['type'],  # 'GenomicVariant'
                                          variantType=node['variantType'])  #'Deletion'})
             variants_to_add.append(newVariant)
-            break
+
     add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     variant_affects_gene_to_add = []
     genes = []
+    available_variants = {variant.variant_primaryDomainId for variant in variants_to_add}
     for variant, gene in variant_affects_gene_dict.items():
-        if(variant in clinvar_ids and gene in entrez_ids):
+        if(variant in available_variants and gene in entrez_ids):
             variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
     add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'genomic_variant'])
     session.commit()
-    return
 
 
 def add_missing(session, data, node_type):
@@ -487,6 +490,7 @@ def countEntries(session, metadata):
         table_counts[table_name] = count
     for table_name, count in table_counts.items():
         print(f"Table {table_name} has {count} rows.")
+    print("Total number of rows in the database: ", sum(table_counts.values()))
 
 
 def testingSetup(session):
@@ -501,33 +505,35 @@ if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Base.metadata.drop_all(engine)
     # cohort study
-    observations = "CHRIS"
+    observations = os.getenv("OBSERVATION_SOURCE")
     # Define a session
     Session = sessionmaker(bind=engine)
     session = Session()
     metadata = MetaData()
 
-    #Reflect the tables
+    # Reflect the tables
     metadata.reflect(bind=engine)
     create_tables()
-    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    edges_path = '../data/scores.csv'
-    # testingSetup(session)
-    #add_disorder_data(session, pheno_data_path, obs_source=observations)
-    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
 
-    #add_protein_data(session, protein_data_path, obs_source=observations)
-    # add_metabolite_data(session, metabo_data_path, obs_source=observations)  # missing the file please upload @elias
-    # add the edges calculated from the available data
+    pheno_data_path = os.getenv("PHENOTYPE_PATH")
+    protein_data_path = os.getenv("PROTEIN_PATH")
+    metabo_data_path = os.getenv("METABOLITE_PATH")
+    edges_path = os.getenv("CALCULATED_EDGES_PATH")
+    # testingSetup(session)
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    add_phenotype_data(session, pheno_data_path, obs_source=observations)
+
+    add_protein_data(session, protein_data_path, obs_source=observations)
+    add_metabolite_data(session, metabo_data_path, obs_source=observations)
+
     gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # gene_ids_replaced = {x.replace('entrez.', '') for x in gene_ids}
     add_genomic_variants(session, gene_ids, observation_source='external')
-    # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+
+    # add the edges calculated from the available data
+    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
-    # add_phenotype_data(session, pheno_data_path, obs_source='external')
+    add_phenotype_data(session, pheno_data_path, obs_source='external')
     countEntries(session, metadata)
 
 

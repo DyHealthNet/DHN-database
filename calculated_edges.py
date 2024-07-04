@@ -87,21 +87,20 @@ def diff_phenotype_disorder(base_map: dict, session):
     return phenotype_map, disorder_map
 
 
-def map_edge(edge: tuple[str, str], protein_map: dict, pheno_map: dict, metabo_map: dict, disorder_map: dict = None):
-    source_type = None
-    target_type = None
-    mapped_source = None
-    mapped_target = None
-    for map, type in zip([protein_map, pheno_map, metabo_map, disorder_map],
-                         ['protein', 'phenotype', 'metabolite', 'disorder']):
-        # map the source and target to the proper names
+def map_edge(edge: pd.Series, protein_map: dict, pheno_map: dict, metabo_map: dict, disorder_map: dict = None):
+    maps_and_types = [(protein_map, 'protein'), (pheno_map, 'phenotype'), (metabo_map, 'metabolite'),
+                      (disorder_map, 'disorder')]
+
+    mapped_source = mapped_target = source_type = target_type = None
+
+    for map, type in maps_and_types:
         if not mapped_source:
-            mapped_source = map.get(edge[0], None)
+            mapped_source = map.get(edge['label1'])
             if mapped_source:
                 source_type = type
 
         if not mapped_target:
-            mapped_target = map.get(edge[1], None)
+            mapped_target = map.get(edge['label2'])
             if mapped_target:
                 target_type = type
 
@@ -115,32 +114,68 @@ def map_edge(edge: tuple[str, str], protein_map: dict, pheno_map: dict, metabo_m
 
 def format_edges(session, edges: pd.DataFrame, protein_map: dict, phenotype_map: dict, metabolite_map: dict,
                  disorder_map: dict):
-    formatted_edges = []
-    num_edge_types = {}
-    for idx, edge_row in tqdm.tqdm(edges.iterrows(), maxinterval=len(edges), desc="Rows"):
-        edge = edge_row['label1'], edge_row['label2']
-        mapped_edge, types = map_edge(edge, protein_map, phenotype_map, metabolite_map, disorder_map)
-        if not types:
-            # print(f"Edge {edge} not found in any of the maps")
-            continue
-        source, target = mapped_edge
-        source_type, target_type = types
-        edge_type, source_col, target_col = DB_EDGES[(source_type, target_type)]
-        edge_values = {source_col: source,
-                       target_col: target,
-                       'p_value': edge_row['pval'],
-                       'adjusted_p_value': edge_row['adj_pval'],
-                       'effect_size': edge_row['effsize'],
-                       'effect_size_type': edge_row['effsize_type']}
-        edge = edge_type(**edge_values)
-        formatted_edges.append(edge)
-        num_edge_types[edge_type] = num_edge_types.get(edge_type, 0) + 1
-        if idx % 1_000_000 == 0:
-            add_edges(session, formatted_edges)
-            formatted_edges = []
+
+    def map_and_filter(edge):
+        mapped, types = map_edge(edge, protein_map, phenotype_map, metabolite_map, disorder_map)
+        return mapped, types if types else None
+
+    mapped_results = edges.apply(map_and_filter, axis=1)
+
+    print(f"Mapped {len(mapped_results):.2f} edges")
+    valid_results = [result for result in mapped_results if result[1] is not None]
+
+    # Separate the mapped edges and types
+    mapped_edges, types_list = zip(*valid_results)
+
+    # Extract valid rows based on indices of valid results
+    valid_indices = [i for i, result in enumerate(mapped_results) if result[1] is not None]
+    valid_edges = edges.iloc[valid_indices]
+
+    # Create a new DataFrame with the mapped data
+    formatted_edges = pd.DataFrame({
+        'source': [source for source, _ in mapped_edges],
+        'target': [target for _, target in mapped_edges],
+        'source_type': [source_type for source_type, _ in types_list],
+        'target_type': [target_type for _, target_type in types_list],
+        'p_value': valid_edges['pval'].values,
+        'adjusted_p_value': valid_edges['adj_pval'].values,
+        'effect_size': valid_edges['effsize'].values,
+        'effect_size_type': valid_edges['effsize_type'].values
+    })
+
+    # Define a function to create edge data
+    def create_edge_data(row):
+        edge_type, source_col, target_col = DB_EDGES[(row['source_type'], row['target_type'])]
+        return {
+            'edge_type': edge_type,
+            source_col: row['source'],
+            target_col: row['target'],
+            'p_value': row['p_value'],
+            'adjusted_p_value': row['adjusted_p_value'],
+            'effect_size': row['effect_size'],
+            'effect_size_type': row['effect_size_type']
+        }
+
+    # Apply the create_edge_data function
+    formatted_edges['edge_data'] = formatted_edges.apply(create_edge_data, axis=1)
+
+    # Create the final formatted edges list
+    formatted_edges_list = [
+        row['edge_type'](**{key: value for key, value in row.items() if key != 'edge_type'})
+        for row in formatted_edges['edge_data']
+    ]
+
+    num_edge_types = pd.Series([edge.__class__ for edge in formatted_edges_list]).value_counts().to_dict()
+    
+    # add edges in batches and remove them from memory
+    batch_size = 1_000_000
+    for i in tqdm.tqdm(range(0, len(formatted_edges_list), batch_size)):
+        add_edges(session, formatted_edges_list[i:i + batch_size])
+        del formatted_edges_list[i:i + batch_size]
+
     for edge_type, count in num_edge_types.items():
         print(f"Added {count} edges of type {edge_type}")
-    add_edges(session, formatted_edges)
+    # add_edges(session, formatted_edges)
     return
 
 

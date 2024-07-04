@@ -52,30 +52,6 @@ class Metabolite(Base):
     observation_source = Column(String)
 
 
-# Association tables between node types
-class GeneAssocDisorder(Base):
-    __tablename__ = 'gene_associates_disorders'
-    id = Column(Integer, primary_key=True)
-    entrez_id = Column(String, ForeignKey('genes.entrez_id'))
-    mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
-    edge_source = Column(String)
-
-
-class DisorderAssocPhenotype(Base):
-    __tablename__ = 'disorder_associates_phenotypes'
-    id = Column(Integer, primary_key=True)
-    mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
-    hpo_id = Column(String, ForeignKey('phenotypes.hpo_id'))
-    edge_source = Column(String)
-
-
-class ProteinAssocProtein(Base):
-    __tablename__ = 'protein_associates_proteins'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    uniprot_id_memberOne = Column(String, ForeignKey('proteins.uniprot_id'))
-    uniprot_id_memberTwo = Column(String, ForeignKey('proteins.uniprot_id'))
-
-
 class Genomic_variant(Base):
     __tablename__ = "genomic_variant"
     variant_primaryDomainId = Column(String, primary_key=True)  #clinvar.17735
@@ -90,19 +66,39 @@ class Genomic_variant(Base):
     variantType = Column(String)  #'Deletion'}
 
 
+# Association tables between node types
+class GeneAssocDisorder(Base):
+    __tablename__ = 'gene_associates_disorder'
+    id = Column(Integer, primary_key=True)
+    entrez_id = Column(String, ForeignKey('genes.entrez_id'))
+    mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
+    edge_source = Column(String)
+
+
+class DisorderAssocPhenotype(Base):
+    __tablename__ = 'disorder_associates_phenotype'
+    id = Column(Integer, primary_key=True)
+    mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
+    hpo_id = Column(String, ForeignKey('phenotypes.hpo_id'))
+    edge_source = Column(String)
+
+
+class ProteinAssocProtein(Base):
+    __tablename__ = 'protein_associates_protein'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uniprot_id_memberOne = Column(String, ForeignKey('proteins.uniprot_id'))
+    uniprot_id_memberTwo = Column(String, ForeignKey('proteins.uniprot_id'))
+
+
 class Variant_affects_gene(Base):
     __tablename__ = 'variant_affects_gene'
-    variant_primaryDomainId = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     genomic_variant = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
     entrez_id = Column(String, ForeignKey('genes.entrez_id'))
 
 
-# type = Column(String)
-#{'created': '2024-06-23T21:22:51.581000', 'dataSources': ['clinvar'], 'sourceDomainId': 'clinvar.2205837', 'targetDomainId': 'entrez.79501', 'type': 'VariantAffectsGene', 'updated': '2024-06-23T21:22:51.581000'}
-
-
 class ProteinAssocMetabolite(Base):
-    __tablename__ = 'protein_associates_metabolites'
+    __tablename__ = 'protein_associates_metabolite'
     id = Column(Integer, primary_key=True)
     uniprot_id = Column(String, ForeignKey('proteins.uniprot_id'))
     hmdb_id = Column(String, ForeignKey('metabolites.hmdb_id'))
@@ -110,7 +106,7 @@ class ProteinAssocMetabolite(Base):
 
 
 class MetaboliteAssocDisorder(Base):
-    __tablename__ = 'metabolite_associates_disorders'
+    __tablename__ = 'metabolite_associates_disorder'
     id = Column(Integer, primary_key=True)
     hmdb_id = Column(String, ForeignKey('metabolites.hmdb_id'))
     mondo_id = Column(String, ForeignKey('disorders.mondo_id'))
