@@ -1,8 +1,7 @@
 import os
 
 import networkx as nx
-from nedrex.core import iter_edges, iter_nodes, get_nodes, get_collection_attributes, get_edge_types
-from sqlalchemy import URL, create_engine, text, Table, MetaData
+from sqlalchemy import URL, create_engine, text, Table, MetaData, Index, inspect, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
@@ -501,6 +500,54 @@ def testingSetup(session):
     test = 2
 
 
+def add_indexes(session, engine, metadata):
+    # Protein indexes for quick search
+    idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.uniprot_id_1)
+    idx_uniprot_id_1.create(engine)
+
+    idx_uniprot_id_2 = Index('idx_uniprot_id_2', EffectsProteinProtein.uniprot_id_2)
+    idx_uniprot_id_2.create(engine)
+
+    # Index for quick typeahead search
+    view_description_fts = Table('view_description_fts', metadata, autoload_with=engine)
+    idx_display_name_fts = Index('idx_display_name_fts', view_description_fts.c.display_name)
+    idx_display_name_fts.create(engine)
+
+    # add the last index that doesn't work well with sqlalchemy
+    if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
+        print("Index idx_description_fts already exists.")
+        return
+    session.execute(text("CREATE INDEX idx_description_fts "
+                         "ON view_description_fts USING gin(to_tsvector('english', description));"))
+    session.commit()
+
+
+def add_views(session):
+    # check if the view already exists and if so, update it
+    view_exists = session.execute(text("SELECT to_regclass('view_description_fts')")).scalar()
+    if view_exists is not None:
+        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
+        session.commit()
+        print("View view_description_fts already exists. Refreshed.")
+        return
+
+    # sql alchemy doesn't support creating views, so we have to use raw sql
+    view_sql = """
+    CREATE MATERIALIZED VIEW view_description_fts AS
+    SELECT 'disorder' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorders
+    UNION ALL
+    SELECT 'metabolite' AS source_table, hmdb_id AS id, description, display_name FROM metabolites
+    UNION ALL
+    SELECT 'gene' AS source_table, entrez_id AS id, description, display_name FROM genes
+    UNION ALL
+    SELECT 'protein' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM proteins
+    UNION ALL
+    SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM phenotypes;
+    """
+    session.execute(text(view_sql))
+    session.commit()
+
+
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Base.metadata.drop_all(engine)
@@ -520,21 +567,26 @@ if __name__ == '__main__':
     metabo_data_path = os.getenv("METABOLITE_PATH")
     edges_path = os.getenv("CALCULATED_EDGES_PATH")
     # testingSetup(session)
-    add_disorder_data(session, pheno_data_path, obs_source=observations)
-    add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    # add_disorder_data(session, pheno_data_path, obs_source=observations)
+    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    #
+    # add_protein_data(session, protein_data_path, obs_source=observations)
+    # add_metabolite_data(session, metabo_data_path, obs_source=observations)
+    #
+    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    # add_genomic_variants(session, gene_ids, observation_source='external')
+    #
+    # # add the edges calculated from the available data
+    # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    #
+    # # second pass for phenotypes
+    # add_phenotype_data(session, pheno_data_path, obs_source='external')
 
-    add_protein_data(session, protein_data_path, obs_source=observations)
-    add_metabolite_data(session, metabo_data_path, obs_source=observations)
+    # # count the number of entries in the database
+    # countEntries(session, metadata)
 
-    gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    add_genomic_variants(session, gene_ids, observation_source='external')
-
-    # add the edges calculated from the available data
-    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-
-    # second pass for phenotypes
-    add_phenotype_data(session, pheno_data_path, obs_source='external')
-    countEntries(session, metadata)
-
-
-
+    # add remaining things (indexes, views)
+    add_views(session)
+    add_indexes(session, engine, metadata)
+    session.close()
+    print("Database setup complete.")

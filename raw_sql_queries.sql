@@ -1,17 +1,38 @@
 SELECT COUNT(genes.display_name)
 FROM genes;
 
+
+-- rename genome variant column to clinvar_id
+ALTER TABLE genomic_variant
+RENAME COLUMN "variant_primaryDomainId" TO clinvar_id;
+
+
 -- this is for typeahead search
-CREATE VIEW view_description_fts AS
-SELECT 'disorder' AS source_table, mondo_id AS id, description FROM disorders
+CREATE MATERIALIZED VIEW view_description_fts AS
+SELECT 'disorder' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorders
 UNION ALL
-SELECT 'metabolite' AS source_table, hmdb_id AS id, description FROM metabolites
+SELECT 'metabolite' AS source_table, hmdb_id AS id, description, display_name FROM metabolites
 UNION ALL
-SELECT 'gene' AS source_table, entrez_id AS id, description FROM genes
+SELECT 'gene' AS source_table, entrez_id AS id, description, display_name FROM genes
 UNION ALL
-SELECT 'protein' AS source_table, uniprot_id AS id, description FROM proteins
+SELECT 'protein' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM proteins
 UNION ALL
-SELECT 'phenotype' AS source_table, hpo_id AS id, description FROM phenotypes;
+SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM phenotypes;
+
+-- drop the materialized view if it already exists
+DROP MATERIALIZED VIEW view_description_fts;
+
+SELECT *
+FROM view_description_fts;
+
+CREATE INDEX idx_description_fts ON view_description_fts USING gin(to_tsvector('english', description));
+CREATE INDEX idx_display_name ON view_description_fts (display_name);
+
+-- list all indices
+SELECT *
+FROM pg_indexes
+WHERE schemaname = 'public';
+
 
 -- also for typeahead search
 SELECT *
