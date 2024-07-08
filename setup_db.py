@@ -534,15 +534,15 @@ def add_views(session):
     # sql alchemy doesn't support creating views, so we have to use raw sql
     view_sql = """
     CREATE MATERIALIZED VIEW view_description_fts AS
-    SELECT 'disorder' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorders
+    SELECT 'disorders' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorders
     UNION ALL
-    SELECT 'metabolite' AS source_table, hmdb_id AS id, description, display_name FROM metabolites
+    SELECT 'metabolites' AS source_table, hmdb_id AS id, description, display_name FROM metabolites
     UNION ALL
-    SELECT 'gene' AS source_table, entrez_id AS id, description, display_name FROM genes
+    SELECT 'genes' AS source_table, entrez_id AS id, description, display_name FROM genes
     UNION ALL
-    SELECT 'protein' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM proteins
+    SELECT 'proteins' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM proteins
     UNION ALL
-    SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM phenotypes;
+    SELECT 'phenotypes' AS source_table, hpo_id AS id, description, display_name FROM phenotypes;
     """
     session.execute(text(view_sql))
     session.commit()

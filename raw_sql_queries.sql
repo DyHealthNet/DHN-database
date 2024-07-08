@@ -39,6 +39,10 @@ SELECT *
 FROM view_description_fts
 WHERE to_tsvector('english', description) @@ plainto_tsquery('english', 'low body');
 
+SELECT *
+FROM view_description_fts
+WHERE display_name ILIKE 'brca%';
+
 
 -- select all rows from the proteins table
 SELECT *
