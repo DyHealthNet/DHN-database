@@ -503,15 +503,19 @@ def testingSetup(session):
 def add_indexes(session, engine, metadata):
     # Protein indexes for quick search
     idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.uniprot_id_1)
-    idx_uniprot_id_1.create(engine)
+    # check if the index already exists
+    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_1')")).scalar():
+        idx_uniprot_id_1.create(engine)
 
     idx_uniprot_id_2 = Index('idx_uniprot_id_2', EffectsProteinProtein.uniprot_id_2)
-    idx_uniprot_id_2.create(engine)
+    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_2')")).scalar():
+        idx_uniprot_id_2.create(engine)
 
     # Index for quick typeahead search
     view_description_fts = Table('view_description_fts', metadata, autoload_with=engine)
     idx_display_name_fts = Index('idx_display_name_fts', view_description_fts.c.display_name)
-    idx_display_name_fts.create(engine)
+    if not session.execute(text("SELECT to_regclass('idx_display_name_fts')")).scalar():
+        idx_display_name_fts.create(engine)
 
     # add the last index that doesn't work well with sqlalchemy
     if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
@@ -566,24 +570,25 @@ if __name__ == '__main__':
     protein_data_path = os.getenv("PROTEIN_PATH")
     metabo_data_path = os.getenv("METABOLITE_PATH")
     edges_path = os.getenv("CALCULATED_EDGES_PATH")
+    data_dir = os.getenv("DATA_DIR")
     # testingSetup(session)
-    # add_disorder_data(session, pheno_data_path, obs_source=observations)
-    # add_phenotype_data(session, pheno_data_path, obs_source=observations)
-    #
-    # add_protein_data(session, protein_data_path, obs_source=observations)
-    # add_metabolite_data(session, metabo_data_path, obs_source=observations)
-    #
-    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # add_genomic_variants(session, gene_ids, observation_source='external')
-    #
-    # # add the edges calculated from the available data
-    # add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-    #
-    # # second pass for phenotypes
-    # add_phenotype_data(session, pheno_data_path, obs_source='external')
+    add_disorder_data(session, pheno_data_path, obs_source=observations)
+    add_phenotype_data(session, pheno_data_path, obs_source=observations, data_dir=data_dir)
 
-    # # count the number of entries in the database
-    # countEntries(session, metadata)
+    add_protein_data(session, protein_data_path, obs_source=observations)
+    add_metabolite_data(session, metabo_data_path, obs_source=observations, data_dir=data_dir)
+
+    gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    add_genomic_variants(session, gene_ids, observation_source='external')
+
+    # add the edges calculated from the available data
+    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+
+    # second pass for phenotypes
+    add_phenotype_data(session, pheno_data_path, obs_source='external', data_dir=data_dir)
+
+    # count the number of entries in the database
+    countEntries(session, metadata)
 
     # add remaining things (indexes, views)
     add_views(session)
