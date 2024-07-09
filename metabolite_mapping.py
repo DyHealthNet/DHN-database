@@ -28,9 +28,10 @@ def backcoupled_metabolites_disease(elem, omim_ids):
 
 
 def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
-                   omim_ids: set = None) -> dict[str, dict]:
+                   omim_ids: set = None, observation_source: str = None) -> dict[str, dict]:
     """
     Read the HMDB data and return a dictionary of relevant metabolites
+    :param observation_source: str, name of the cohort study
     :param hmdb_file: str, path to the HMDB file
     :param relevant_ids: set, set of relevant metabolite ids
     :param ext_ref: list, list of external references to extract, must end with '_id'
@@ -65,6 +66,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
         # get the display name, description, xrefs, synonyms and associated proteins
         display_name = elem.find('name').text
         description = elem.find('description').text
+        observation_source = observation_source if accession in relevant_ids else 'external'
         # get xrefs from kegg, chemspider, drugbank, pdb, wikipedia
         xrefs = []
         for ref in ext_ref:
@@ -83,7 +85,8 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
                                 'xrefs': xrefs,
                                 'synonyms': synonyms,
                                 'proteins': proteins,
-                                'diseases': disease_associations}
+                                'diseases': disease_associations,
+                                'observation_source': observation_source}
         # clear the element
         root.clear()
 

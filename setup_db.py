@@ -366,7 +366,8 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     print(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
     omim_diseases = get_additional_diseases(session, obs_source)
 
-    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites, omim_ids=omim_diseases)
+    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites, omim_ids=omim_diseases,
+                                  observation_source=obs_source)
     print(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
           f"{len(unique_metabolites)} metabolites in the mapping file.")
 
@@ -396,7 +397,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                                       description=hmdb_mapping[metabolite]['description'],
                                       synonyms=hmdb_mapping[metabolite]['synonyms'],
                                       xrefs=hmdb_mapping[metabolite]['xrefs'],
-                                      observation_source=obs_source))
+                                      observation_source=hmdb_mapping[metabolite]['observation_source']))
 
         for disease in hmdb_mapping[metabolite]['diseases']:
             if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
