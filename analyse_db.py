@@ -10,13 +10,14 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 all_models = [cls for name, cls in inspect.getmembers(sys.modules['models']) if inspect.isclass(cls)]
-nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, Genomic_variant]
+nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, Genomic_variant, CohortProtein, CohortMetabolite,
+         CohortPhenotype]
 print(len(all_models))
 
 #%%
 # check how many rows are in each table
 sum_all = 0
-for model in nodes:
+for model in all_models:
     if not hasattr(model, '__tablename__'):
         continue
     count = session.query(model).count()

@@ -4,7 +4,7 @@ import os
 dotenv.load_dotenv()
 
 # Debug settings
-DEBUG = os.getenv('DEBUG')
+DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 
 # Database settings
