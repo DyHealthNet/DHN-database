@@ -24,6 +24,9 @@ METABOLITE_PATH = os.getenv("METABOLITE_PATH")
 EDGES_PATH = os.getenv("CALCULATED_EDGES_PATH")
 DATA_DIR = os.getenv("DATA_DIR")
 
+# Other settings
+CHUNK_SIZE = os.getenv("CHUNK_SIZE") if os.getenv("CHUNK_SIZE") else 10_000_000
+
 if DEBUG:
     print("Launching with the following settings:")
     print(f"DB_USER: {DB_USER}")

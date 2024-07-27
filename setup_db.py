@@ -585,7 +585,7 @@ def add_views(session):
 
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
-    # Base.metadata.drop_all(engine)
+    Base.metadata.drop_all(engine)
     # cohort study
     observations = OBSERVATIONS
     # Define a session
@@ -593,7 +593,6 @@ if __name__ == '__main__':
     session = Session()
     metadata = MetaData()
 
-    # Reflect the tables
     metadata.reflect(bind=engine)
     create_tables()
 
@@ -628,7 +627,7 @@ if __name__ == '__main__':
     countEntries(session, metadata)
 
     # add remaining things (indexes, views)
-    add_views(session)
-    add_indexes(session, engine, metadata)
+    # add_views(session)
+    # add_indexes(session, engine, metadata)
     session.close()
     print("Database setup complete.")

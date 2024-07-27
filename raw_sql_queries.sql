@@ -23,7 +23,8 @@ SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM
 DROP MATERIALIZED VIEW view_description_fts;
 
 SELECT *
-FROM view_description_fts;
+FROM view_description_fts
+WHERE display_name ILIKE 'rca%' OR description ILIKE 'brca%' or id ILIKE 'brca%';
 
 CREATE INDEX idx_description_fts ON view_description_fts USING gin(to_tsvector('english', description));
 CREATE INDEX idx_display_name ON view_description_fts (display_name);
@@ -64,7 +65,7 @@ CREATE INDEX idx_uniprot_id_1 ON effects_protein_protein(uniprot_id_1);
 CREATE INDEX idx_uniprot_id_2 ON effects_protein_protein(uniprot_id_2);
 
 -- select all rows from the effects_protein_protein table where a specific protein is involved
-SELECT
+EXPLAIN SELECT
     effects_protein_protein.*,
     proteins1.*,
     proteins2.*
