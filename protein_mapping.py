@@ -23,7 +23,8 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
         primary_domain_id = node['primaryDomainId']
         if primary_domain_id in uniprot_ids:
             protein = Protein(
-                uniprot_id= str(primary_domain_id),
+                uniprot_id=str(primary_domain_id),
+                display_name=str(node.get('displayName')),
                 gene_entrez_id=str(node.get('geneName')),
                 sequence=str(node.get('sequence')),
                 description=str(node.get('comments')),

@@ -192,7 +192,10 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
         exists = session.query(column).filter_by(**filter_values).first()
-        if exists is not None:
+        if exists is not None and DEBUG:
+            # remove existing item
+            session.delete(exists)
+        elif exists is not None:
             continue
         try:
             session.add(item)
@@ -520,7 +523,6 @@ def countEntries(session, metadata):
         print(f"Table {table_name} has {count} rows.")
     print("Total number of rows in the database: ", sum(table_counts.values()))
 
-
 def testingSetup(session):
     protein = test_protein(5)
     gene = test_gene()
@@ -616,7 +618,8 @@ if __name__ == '__main__':
     #
     # # add cohort phenotype data as the mapping is incomplete
     # add_cohort_phenotype_data(session, pheno_data_path, obs_source=observations)
-    add_cohort_metabolite_data(session, metabo_data_path, obs_source=observations)
+    # add_cohort_metabolite_data(session, metabo_data_path, obs_source=observations)
+    add_cohort_protein_data(session, protein_data_path, obs_source=observations)
 
     # add the edges calculated from the available data
     add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)

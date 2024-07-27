@@ -64,6 +64,7 @@ class Phenotype(Base):
 class Protein(Base):
     __tablename__ = 'protein'
     uniprot_id = Column(String, primary_key=True)
+    display_name = Column(String)
     sequence = Column(String)
     gene_entrez_id = Column(String)
     description = Column(String)
