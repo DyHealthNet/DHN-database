@@ -135,8 +135,8 @@ class EffectsProteinPhenotype(Base):
 class EffectsMetaboliteMetabolite(Base):
     __tablename__ = 'effects_metabolite_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    phenotype_id_1 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
-    phenotype_id_2 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    metabolite_id_1 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    metabolite_id_2 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     p_value = Column(Float)
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)

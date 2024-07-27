@@ -68,7 +68,7 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
         uniprot = f"uniprot.{row['UniProt']}" if row['UniProt'] else None
         uniprot = uniprot if uniprot in protein_map else None
         new_protein = CohortProtein(cohort_id=name,
-                                    display_name=protein_map.get(name, None),
+                                    display_name=protein_map.get(uniprot) if uniprot else None,
                                     description=row['long_description'],
                                     uniprot_id=uniprot)
         proteins_to_add.append(new_protein)

@@ -24,7 +24,7 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
         if primary_domain_id in uniprot_ids:
             protein = Protein(
                 uniprot_id=str(primary_domain_id),
-                display_name=str(node.get('displayName')),
+                display_name=f"{node.get('displayName').split('_')[0]}",  # Remove the species from the display name
                 gene_entrez_id=str(node.get('geneName')),
                 sequence=str(node.get('sequence')),
                 description=str(node.get('comments')),
@@ -33,7 +33,7 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
             protein_set.append(protein)
             found_proteins.add(primary_domain_id)
         if DEBUG:
-            if len(protein_set) > 10:
+            if len(protein_set) > 100:
                 break
 
     return protein_set, found_proteins
@@ -60,7 +60,7 @@ def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = 
         primary_domain_id = node['primaryDomainId']
         if primary_domain_id in uniprot_ids:
             protein = Protein(
-                uniprot_id= str(primary_domain_id),
+                uniprot_id=str(primary_domain_id),
                 gene_entrez_id=str(node.get('geneName')),
                 sequence=str(node.get('sequence')),
                 description=str(node.get('comments')),
@@ -70,8 +70,7 @@ def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = 
     return protein_set
 
 
-
-def read_proteinID_chris(proteinID_path: str) :
+def read_proteinID_chris(proteinID_path: str):
     """
     reads Protein IDs from Chris dataset
     """
@@ -85,13 +84,13 @@ def retrieve_interacting_proteins_neo4j(protein_ids):
     # Constructing a string of protein IDs for the Cypher query
     protein_id_string = ', '.join([f'"{protein_id}"' for protein_id in protein_ids])
     #P04049
-    query= f"""
+    query = f"""
     MATCH (p1:Protein)-[r]->(p2:Protein)
     WHERE p1.primaryDomainId IN [{protein_id_string}] AND p2.primaryDomainId IN [{protein_id_string}]
     RETURN p1.primaryDomainId, p2.primaryDomainId, r
     """
     url = "https://api.nedrex.net/neo4j/query"
-    response = requests.get(url, params={"query":query}, stream=True)
+    response = requests.get(url, params={"query": query}, stream=True)
     #print("response")
     for line in response.iter_lines():
         print("response")
@@ -109,23 +108,23 @@ def retrieve_interacting_proteins_neo4j(protein_ids):
 """
 
 [
-  "disorder",
-  "drug",
-  "gene",
-  "pathway",
-  "protein",
-  "signature"
+    "disorder",
+    "drug",
+    "gene",
+    "pathway",
+    "protein",
+    "signature"
 ]
-
-
 
 
 def testneo4j():
     query = "MATCH (n) RETURN n LIMIT 25"
     url = "http://nedrex-api.zbh.uni-hamburg.de/neo4j/query"
-    response = requests.get(url, params={"query":query}, stream=True)
+    response = requests.get(url, params={"query": query}, stream=True)
     for line in response.iter_lines():
         print(json.loads(line.decode()))
+
+
 def get_proteinID_neddrex(proteinID: str):
     """
     fetches data for proteinID from neddrex
