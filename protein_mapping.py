@@ -10,10 +10,13 @@ from query_nedrex import get_disorder_data, domain_id_to_mondo, get_needed_snome
     get_harmonizome_data, get_phenotype_data
 from nedrex.core import iter_nodes, iter_edges
 from models import Protein
+from settings import DEBUG
 
-def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> list[Protein]:
-    print("UniProt IDs:", uniprot_ids)
+
+def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> tuple[list[Protein], set[str]]:
+    print("UniProt IDs:", len(uniprot_ids))
     protein_set = []
+    found_proteins = set()
     uniprot_ids = {f"uniprot.{uniprot_id}" for uniprot_id in uniprot_ids}
     for node in iter_nodes('protein'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
@@ -27,7 +30,13 @@ def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = No
                 observation_source=observation_source
             )
             protein_set.append(protein)
-    return protein_set
+            found_proteins.add(primary_domain_id)
+        if DEBUG:
+            if len(protein_set) > 10:
+                break
+
+    return protein_set, found_proteins
+
 
 def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = None) -> list[dict]:
     print("len(ids):", len(entrez_ids))
@@ -60,11 +69,14 @@ def get_genomic_variants(entrez_ids: set[str] = None, observation_source: str = 
     return protein_set
 
 
+
 def read_proteinID_chris(proteinID_path: str) :
     """
     reads Protein IDs from Chris dataset
     """
     df = pd.read_csv(proteinID_path, sep='\t')
+    # check how many nans in the uniprot ocl
+    print("Number of nans in UniProt col:", df['UniProt'].isna().sum())
     return df['UniProt'].unique()
 
 
