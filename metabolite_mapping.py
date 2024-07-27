@@ -2,6 +2,7 @@ import os.path
 import pandas as pd
 import xml.etree.ElementTree as ET
 from query_nedrex import domain_id_to_mondo, get_disorder_data
+from settings import DEBUG
 
 
 def download_metabolite_data(data_path: str):
@@ -48,6 +49,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
     context = iter(context)
     event, root = next(context)  # Get the root element
     hmdb_info = {}
+    found_ids = set()
 
     for event, elem in context:
         # remove the namespace
@@ -66,7 +68,8 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
         # get the display name, description, xrefs, synonyms and associated proteins
         display_name = elem.find('name').text
         description = elem.find('description').text
-        observation_source = observation_source if accession in relevant_ids else 'external'
+        metabolite_observation_source = observation_source if any(ac in relevant_ids for ac
+                                                                  in [accession] + secondary_accessions) else 'external'
         # get xrefs from kegg, chemspider, drugbank, pdb, wikipedia
         xrefs = []
         for ref in ext_ref:
@@ -75,7 +78,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
                 xrefs.append(f"{ref.split('_')[0]}.{xref.text}")
 
         # add secondary accessions to xrefs
-        xrefs.extend(secondary_accessions)
+        xrefs.extend([f"hmdb.{sec}" for sec in secondary_accessions])
         synonyms = [synonym.text for synonym in elem.findall('synonyms/synonym')]
         proteins = [protein.text for protein in elem.findall('protein_associations/protein/uniprot_id')]
         disease_associations = [disease.text for disease in elem.findall('diseases/disease/omim_id')
@@ -86,10 +89,15 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
                                 'synonyms': synonyms,
                                 'proteins': proteins,
                                 'diseases': disease_associations,
-                                'observation_source': observation_source}
+                                'observation_source': metabolite_observation_source}
         # clear the element
+        found_ids.add(accession)
         root.clear()
 
+        if DEBUG and len(hmdb_info) > 100:
+            break
+
+    print(f"Ids that could not be found: {relevant_ids - found_ids}")
     return hmdb_info
 
 
