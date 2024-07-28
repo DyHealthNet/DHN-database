@@ -4,6 +4,7 @@ from sqlalchemy.orm import declarative_base
 # Create a declarative base
 Base = declarative_base()
 
+
 ### Tables of data from the cohort study ###
 
 class CohortPhenotype(Base):

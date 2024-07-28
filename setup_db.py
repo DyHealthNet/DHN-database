@@ -1,23 +1,18 @@
-import os
-
 import networkx as nx
-import pandas as pd
-from sqlalchemy import URL, create_engine, text, Table, MetaData, Index, inspect, func
+from settings import *
+from testcases import *
+from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase
+from calculated_edges import add_calculated_edges
+from sqlalchemy import URL, text, Table, MetaData
+from protein_mapping import read_proteinID_chris, get_protein_nodes
 
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
-from models import *
+from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
-from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import read_proteinID_chris, get_protein_nodes
-from cohort_data_format import *
-from calculated_edges import add_calculated_edges
-from testcases import *
-from settings import *
-
 
 url = url_object = URL.create(
     "postgresql",
@@ -33,6 +28,14 @@ engine = create_engine(url)
 def create_tables():
     # does not recreate tables if they already exist
     Base.metadata.create_all(engine)
+
+
+def delete_tables(session):
+    # remove all tables and first the views
+    # sql alchemy doesn't support dropping views, so we have to use raw sql
+    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
+    session.commit()
+    Base.metadata.drop_all(engine, checkfirst=True)
 
 
 def example_query(session):
@@ -87,7 +90,8 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
     :param snomed_to_mondo: map from snomed to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
     :param obs_source: Describes the source of observations - e.g. CHRIS
-    :return: list of genes to add, list of disorders to add, list of gene associations to add, number of snomed ids found
+    :return: list of genes to add, list of disorders to add, list of gene associations to add,
+    number of snomed ids found
     """
     gene_associations = set()
     genes_to_add = set()
@@ -523,6 +527,7 @@ def countEntries(session, metadata):
         print(f"Table {table_name} has {count} rows.")
     print("Total number of rows in the database: ", sum(table_counts.values()))
 
+
 def testingSetup(session):
     protein = test_protein(5)
     gene = test_gene()
@@ -569,15 +574,11 @@ def add_views(session):
     # sql alchemy doesn't support creating views, so we have to use raw sql
     view_sql = """
     CREATE MATERIALIZED VIEW view_description_fts AS
-    SELECT 'disorder' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorder
+    SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
     UNION ALL
-    SELECT 'metabolite' AS source_table, hmdb_id AS id, description, display_name FROM metabolite
+    SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, display_name FROM cohort_metabolite
     UNION ALL
-    SELECT 'gene' AS source_table, entrez_id AS id, description, display_name FROM gene
-    UNION ALL
-    SELECT 'protein' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM protein
-    UNION ALL
-    SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM phenotype;
+    SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display_name FROM cohort_phenotype;
     """
     session.execute(text(view_sql))
     session.commit()
@@ -585,15 +586,12 @@ def add_views(session):
 
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
-    # Base.metadata.drop_all(engine)
-    # cohort study
-    observations = OBSERVATIONS
     # Define a session
     Session = sessionmaker(bind=engine)
-    session = Session()
-    metadata = MetaData()
+    db_session = Session()
+    # delete_tables(db_session)
 
-    metadata.reflect(bind=engine)
+    metadata = MetaData()
     create_tables()
 
     pheno_data_path = PHENO_PATH
@@ -602,32 +600,33 @@ if __name__ == '__main__':
     edges_path = EDGES_PATH
     data_dir = DATA_DIR
 
-    # testingSetup(session)
-    add_disorder_data(session, pheno_data_path, obs_source=observations)
-    add_phenotype_data(session, pheno_data_path, obs_source=observations, data_dir=data_dir)
-
-    add_protein_data(session, protein_data_path, obs_source=observations)
-    add_metabolite_data(session, metabo_data_path, obs_source=observations, data_dir=data_dir)
-
-    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # add_genomic_variants(session, gene_ids, observation_source='external')
-
-    # second pass for phenotypes
-    add_phenotype_data(session, pheno_data_path, obs_source='external', data_dir=data_dir)
-
-    # add cohort phenotype data as the mapping is incomplete
-    add_cohort_phenotype_data(session, pheno_data_path, obs_source=observations)
-    add_cohort_metabolite_data(session, metabo_data_path, obs_source=observations)
-    add_cohort_protein_data(session, protein_data_path, obs_source=observations)
-
-    # add the edges calculated from the available data
-    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    # # testingSetup(session)
+    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #
+    # add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #
+    # # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    # # add_genomic_variants(db_session, gene_ids, observation_source='external')
+    #
+    # # second pass for phenotypes
+    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+    #
+    # # add cohort phenotype data as the mapping is incomplete
+    # add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    #
+    # # add the edges calculated from the available data
+    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
-    countEntries(session, metadata)
+    metadata.reflect(bind=engine)
+    countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
-    add_views(session)
-    add_indexes(session, engine, metadata)
-    session.close()
+    add_views(db_session)
+    add_indexes(db_session, engine, metadata)
+    db_session.close()
     print("Database setup complete.")

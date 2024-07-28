@@ -1,3 +1,4 @@
+from sqlalchemy.orm import DeclarativeBase
 from models import Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite
 import pandas as pd
 
@@ -41,13 +42,23 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
     metabolite_map = {x.display_name: (x.hmdb_id, x.description) for x in metabolite_matches}
     for x in metabolite_matches:
         for syn in x.synonyms:
-            metabolite_map[syn] = x.hmdb_id
+            metabolite_map[syn] = (x.hmdb_id, x.description)
+
+    reverse_metabolite_map = {x.hmdb_id: (x.display_name, x.description) for x in metabolite_matches}
 
     # read the metabolite data
     raw_metabolites = pd.read_csv(metabolite_path, sep='\t')
     metabolites_to_add = []
     for index, row in raw_metabolites.iterrows():
         name = row['analyte_name']
+        # maybe there is a slight difference in the name of the metabolite in the cohort data and the database
+        # so we just check the database id
+        if name not in metabolite_map:
+            hmdb_id = f"hmdb.{row['hmdb_id']}" if row['hmdb_id'] else None
+            if hmdb_id and hmdb_id in reverse_metabolite_map:
+                description = reverse_metabolite_map.get(hmdb_id, [None, None])[1]
+                metabolite_map[name] = (hmdb_id, description)
+
         new_metabolite = CohortMetabolite(cohort_id=name,
                                           display_name=name,
                                           description=metabolite_map.get(name, [None, None])[1],

@@ -14,7 +14,7 @@ DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
 DB_NAME = os.getenv('DB_NAME')
 
-
+# Name of the cohort study
 OBSERVATIONS = os.getenv("OBSERVATION_SOURCE")
 
 # Data paths
@@ -42,6 +42,5 @@ if DEBUG:
     print(f"EDGES_PATH: {EDGES_PATH}")
     print(f"DATA_DIR: {DATA_DIR}")
     print("--------------------")
-    print(f"CHUNK_SIZE: {CHUNK_SIZE}")
+    print(f"CHUNK_SIZE: {CHUNK_SIZE:,}")
     print("--------------------\n")
-
