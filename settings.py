@@ -41,4 +41,7 @@ if DEBUG:
     print(f"METABOLITE_PATH: {METABOLITE_PATH}")
     print(f"EDGES_PATH: {EDGES_PATH}")
     print(f"DATA_DIR: {DATA_DIR}")
+    print("--------------------")
+    print(f"CHUNK_SIZE: {CHUNK_SIZE}")
     print("--------------------\n")
+
