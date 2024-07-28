@@ -600,26 +600,26 @@ if __name__ == '__main__':
     edges_path = EDGES_PATH
     data_dir = DATA_DIR
 
-    # # testingSetup(session)
-    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    #
-    # add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    #
-    # # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # # add_genomic_variants(db_session, gene_ids, observation_source='external')
-    #
-    # # second pass for phenotypes
-    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
-    #
-    # # add cohort phenotype data as the mapping is incomplete
-    # add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    # add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
-    # add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    #
-    # # add the edges calculated from the available data
-    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    # testingSetup(session)
+    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+
+    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+
+    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    # add_genomic_variants(db_session, gene_ids, observation_source='external')
+
+    # second pass for phenotypes
+    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+
+    # add cohort phenotype data as the mapping is incomplete
+    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+
+    # add the edges calculated from the available data
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)

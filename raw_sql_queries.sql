@@ -36,8 +36,7 @@ SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display
 
 SELECT *
 FROM view_cohort_fts
-WHERE source_table = 'cohort_metabolite'
-LIMIT 50;
+WHERE view_cohort_fts.display_name IS NULL;
 
 DROP VIEW view_cohort_fts;
 
