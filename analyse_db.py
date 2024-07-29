@@ -25,3 +25,24 @@ for model in all_models:
     sum_all += count
 
 print(f"Total rows: {sum_all}")
+
+#%%
+# check the two layers of the database, first layer is the cohort & calculated stuff, second layer is
+# the external knowledge graph
+layer_one = 0
+layer_two = 0
+names_layer_one = []
+names_layer_two = []
+
+for model in all_models:
+    if not hasattr(model, '__tablename__'):
+        continue
+    if model.__name__.startswith('Cohort') or model.__name__.startswith('Effects'):
+        layer_one += session.query(model).count()
+        names_layer_one.append(model.__name__)
+    else:
+        layer_two += session.query(model).count()
+        names_layer_two.append(model.__name__)
+
+print(f"Cumulative rows in layer one: {layer_one:,}")
+print(f"Cumulative rows in layer two: {layer_two:,}")

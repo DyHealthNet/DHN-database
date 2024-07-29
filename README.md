@@ -41,3 +41,9 @@ Finally, run the main script:
 ```bash
 python setup_db.py
 ```
+
+Alternatively, you can run the script in the background and log the output to a file:
+
+```bash
+nohup python -u setup_db.py > setup_db.log 2>&1 &
+```

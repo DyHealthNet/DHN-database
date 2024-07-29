@@ -12,8 +12,6 @@ class CohortPhenotype(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
-    mondo_id = Column(String, ForeignKey('disorder.mondo_id'))
-    hpo_id = Column(String, ForeignKey('phenotype.hpo_id'))
 
 
 class CohortProtein(Base):
@@ -21,7 +19,6 @@ class CohortProtein(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
-    uniprot_id = Column(String, ForeignKey('protein.uniprot_id'))
 
 
 class CohortMetabolite(Base):
@@ -29,7 +26,6 @@ class CohortMetabolite(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
-    hmdb_id = Column(String, ForeignKey('metabolite.hmdb_id'))
 
 
 ### Tables of data from the external knowledge graph ###
@@ -97,6 +93,35 @@ class Genomic_variant(Base):
 
 
 ### Association tables ###
+
+# Connections between cohort observations and external knowledge graph entities
+class CohortReferencesPhenotype(Base):
+    __tablename__ = 'cohort_references_phenotype'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    hpo_id = Column(String, ForeignKey('phenotype.hpo_id'))
+
+
+class CohortReferencesDisease(Base):
+    __tablename__ = 'cohort_references_disease'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    mondo_id = Column(String, ForeignKey('disorder.mondo_id'))
+
+
+class CohortReferencesProtein(Base):
+    __tablename__ = 'cohort_references_protein'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
+    uniprot_id = Column(String, ForeignKey('protein.uniprot_id'))
+
+
+class CohortReferencesMetabolite(Base):
+    __tablename__ = 'cohort_references_metabolite'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    hmdb_id = Column(String, ForeignKey('metabolite.hmdb_id'))
+
 
 # Calculated effects of cohort observations
 

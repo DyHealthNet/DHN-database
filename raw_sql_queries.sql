@@ -56,7 +56,7 @@ WHERE to_tsvector('english', description) @@ plainto_tsquery('english', 'low bod
 
 SELECT *
 FROM view_description_fts
-WHERE display_name ILIKE 'brca%';
+WHERE display_name ILIKE 'ornithine%';
 
 
 -- select all rows from the proteins table
@@ -110,3 +110,28 @@ FROM information_schema.columns
 WHERE column_name LIKE 'uniprot_id%'
 AND table_schema = 'public';
 
+
+WITH nodes AS (
+    SELECT UNNEST(ARRAY['uniprot.Q9BUT1', 'uniprot.Q3SXY7', 'hmdb.HMDB0000011', 'uniprot.P22087', 'uniprot.P28908',
+        'uniprot.Q13421', 'uniprot.Q9UM07', 'uniprot.Q96DN0', 'hmdb.HMDB0008189']) AS node_id
+)
+SELECT e0.uniprot_id AS source,
+       e0.hmdb_id AS target
+FROM protein_associates_metabolite e0
+JOIN nodes n1 ON e0.uniprot_id = n1.node_id
+JOIN nodes n2 ON e0.hmdb_id = n2.node_id
+
+UNION ALL
+
+SELECT e1.uniprot_id_1 AS source,
+       e1.uniprot_id_2 AS target
+FROM protein_associates_protein e1
+JOIN nodes n1 ON e1.uniprot_id_1 = n1.node_id
+JOIN nodes n2 ON e1.uniprot_id_2 = n2.node_id;
+
+SELECT *
+FROM view_description_fts
+WHERE to_tsvector('english', description) @@ plainto_tsquery('english','A2 receptor') OR
+id ILIKE 'A2 receptor%' OR
+display_name ILIKE 'A2 receptor%'
+LIMIT 10;

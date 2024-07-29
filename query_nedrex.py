@@ -8,7 +8,7 @@ from settings import DEBUG
 
 
 # nedrex.config.set_url_base("https://api.nedrex.net/open/")
-nedrex.config.set_url_base(" https://apps.cosy.bio/licensed")
+nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
 if api_keys_active():
     api_key = get_api_key(accept_eula=True)
     nedrex.config.set_api_key(api_key)
@@ -49,6 +49,8 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
     :param mondo_id: mondo id to fetch data for
     :return: dictionary with entrez ids and sources
     """
+    # Deprecated API call
+    return None
     url = f'https://api.nedrex.net/static/harmonizome/{mondo_id}'
     response = requests.get(url)
     try:

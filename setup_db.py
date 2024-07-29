@@ -31,24 +31,11 @@ def create_tables():
 
 
 def delete_tables(session):
-    # remove all tables and first the views
+    print("Removing all tables from the database.")
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
     session.commit()
     Base.metadata.drop_all(engine, checkfirst=True)
-
-
-def example_query(session):
-    # Querying the database
-    results = (session
-               .query(Gene, Phenotype)
-               .join(GeneAssocDisorder, Gene.entrez_id == GeneAssocDisorder.entrez_id)
-               .filter(Gene.entrez_id == "12345")
-               .all())
-    for gene, phenotype in results:
-        print(
-            f"Gene entrez_id: {gene.entrez_id}, Phenotype hpo_id: {phenotype.hpo_id},"
-            f" SNOMED ID: {phenotype.snomed_id}, OMIM ID: {phenotype.omim_id}")
 
 
 def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[list[str], list[str]] | tuple[None, None]:
@@ -195,10 +182,15 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     """
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
-        exists = session.query(column).filter_by(**filter_values).first()
+        with session.no_autoflush:
+            exists = session.query(column).filter_by(**filter_values).first()
         if exists is not None and DEBUG:
             # remove existing item
-            session.delete(exists)
+            try:
+                session.delete(exists)
+            except SQLAlchemyError as e:
+                session.rollback()
+                print("Could not delete existing item: ", e, "moving on...")
         elif exists is not None:
             continue
         try:
@@ -589,7 +581,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    # delete_tables(db_session)
+    delete_tables(db_session)
 
     metadata = MetaData()
     create_tables()

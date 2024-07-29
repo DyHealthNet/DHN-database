@@ -1,6 +1,26 @@
 from sqlalchemy.orm import DeclarativeBase
-from models import Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite
+from models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
+                    CohortReferencesMetabolite, CohortReferencesProtein, CohortReferencesPhenotype,
+                    CohortReferencesDisease)
 import pandas as pd
+
+
+def duplicate_filter(objects: list, identify_columns: tuple) -> list:
+    """
+    Filter out duplicates from a list of objects based on the values of the columns in identify_columns.
+    :param objects: A list of SQLAlchemy objects to filter
+    :param identify_columns: A tuple of column names to use to identify duplicates
+    :return: A list of objects with duplicates removed
+    """
+    # filter out duplicates
+    reduced = []
+    seen = set()
+    for x in objects:
+        identifier = tuple(getattr(x, col) for col in identify_columns)
+        if identifier not in seen:
+            seen.add(identifier)
+            reduced.append(x)
+    return reduced
 
 
 def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> list:
@@ -19,8 +39,16 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
     print(f"Length of snomed map: {len(snomed_map)}")
     # go through the raw phenotype data and add the phenotypes to the database
     phenotypes_to_add = []
+    disorder_references_to_add = []
+    phenotype_references_to_add = []
+    missing = set()
     for index, row in raw_phenotypes.iterrows():
         snomed_id = row['snomed_id']
+
+        new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=row['snomed_term'],
+                                        description=row['description'])
+        phenotypes_to_add.append(new_phenotype)
+
         mondo_id = hpo_id = None
         if snomed_id in snomed_map:
             if snomed_map[snomed_id].startswith('hpo'):
@@ -28,42 +56,55 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
             else:
                 mondo_id = snomed_map[snomed_id]
 
-        new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=row['snomed_term'],
-                                        description=row['description'], mondo_id=mondo_id, hpo_id=hpo_id)
-        phenotypes_to_add.append(new_phenotype)
+        # add the references to the knowledge graph for the phenotypes
+        if hpo_id:
+            new_reference = CohortReferencesPhenotype(cohort_id=row['label'], hpo_id=hpo_id)
+            disorder_references_to_add.append(new_reference)
+        elif mondo_id:
+            new_reference = CohortReferencesDisease(cohort_id=row['label'], mondo_id=mondo_id)
+            phenotype_references_to_add.append(new_reference)
+        else:
+            missing.add(snomed_id)
+
+    phenotypes_to_add = (duplicate_filter(phenotypes_to_add, ('cohort_id',)) +
+                         duplicate_filter(disorder_references_to_add, ('cohort_id', 'hpo_id')) +
+                         duplicate_filter(phenotype_references_to_add, ('cohort_id', 'mondo_id')))
+    print(f"{len(missing)} snomed ids could not be mapped: {missing}")
     return phenotypes_to_add
 
 
 def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None) -> list:
     print("Adding cohort metabolite data to the database.")
     metabolite_matches = session.query(Metabolite).filter(Metabolite.observation_source == obs_source).all()
-    # This method will assign each metabolite in the cohort study one HMDB id (+ description) even though in the data
-    # itself, there may be multiple HMDB ids for the same metabolite.
-    metabolite_map = {x.display_name: (x.hmdb_id, x.description) for x in metabolite_matches}
+    metabolite_map = {x.hmdb_id: x.hmdb_id for x in metabolite_matches}
     for x in metabolite_matches:
         for syn in x.synonyms:
-            metabolite_map[syn] = (x.hmdb_id, x.description)
+            metabolite_map[syn] = x.hmdb_id
 
-    reverse_metabolite_map = {x.hmdb_id: (x.display_name, x.description) for x in metabolite_matches}
-
-    # read the metabolite data
     raw_metabolites = pd.read_csv(metabolite_path, sep='\t')
+    raw_metabolites['hmdb_id'] = raw_metabolites['hmdb_id'].fillna('')
     metabolites_to_add = []
+    references_to_add = []
+    missing = set()
     for index, row in raw_metabolites.iterrows():
-        name = row['analyte_name']
-        # maybe there is a slight difference in the name of the metabolite in the cohort data and the database
-        # so we just check the database id
-        if name not in metabolite_map:
-            hmdb_id = f"hmdb.{row['hmdb_id']}" if row['hmdb_id'] else None
-            if hmdb_id and hmdb_id in reverse_metabolite_map:
-                description = reverse_metabolite_map.get(hmdb_id, [None, None])[1]
-                metabolite_map[name] = (hmdb_id, description)
+        new_metabolite = CohortMetabolite(cohort_id=row['analyte_name'],
+                                          display_name=row['biochemical_name'],
+                                          description=row['analyte_class'])
 
-        new_metabolite = CohortMetabolite(cohort_id=name,
-                                          display_name=name,
-                                          description=metabolite_map.get(name, [None, None])[1],
-                                          hmdb_id=metabolite_map.get(name, [None, None])[0])
         metabolites_to_add.append(new_metabolite)
+
+        # add the references to the knowledge graph for the metabolites
+        for hmdb_id in row['hmdb_id'].split(';'):
+            hmdb_id = f"hmdb.{hmdb_id}"
+            if hmdb_id in metabolite_map:
+                new_reference = CohortReferencesMetabolite(cohort_id=row['analyte_name'],
+                                                           hmdb_id=metabolite_map[hmdb_id])
+                references_to_add.append(new_reference)
+            else:
+                missing.add(hmdb_id)
+
+    metabolites_to_add = metabolites_to_add + duplicate_filter(references_to_add, ('cohort_id', 'hmdb_id'))
+    print(f"{len(missing)} hmdb ids could not be mapped: {missing}")
     return metabolites_to_add
 
 
@@ -73,14 +114,26 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
     protein_map = {x.uniprot_id: x.display_name for x in protein_matches}
 
     raw_proteins = pd.read_csv(protein_path, sep='\t')
+    raw_proteins['UniProt'] = raw_proteins['UniProt'].fillna('')
     proteins_to_add = []
+    references_to_add = []
+    missing = set()
     for index, row in raw_proteins.iterrows():
         name = row['protein_id']
-        uniprot = f"uniprot.{row['UniProt']}" if row['UniProt'] else None
-        uniprot = uniprot if uniprot in protein_map else None
         new_protein = CohortProtein(cohort_id=name,
-                                    display_name=protein_map.get(uniprot) if uniprot else None,
-                                    description=row['long_description'],
-                                    uniprot_id=uniprot)
+                                    display_name=row['Target'],
+                                    description=row['long_description'])
         proteins_to_add.append(new_protein)
+
+        # add the references to the knowledge graph for the proteins
+        for uniprot_id in row['UniProt'].split('|'):
+            uniprot_id = f"uniprot.{uniprot_id}"
+            if uniprot_id in protein_map:
+                new_reference = CohortReferencesProtein(cohort_id=name, uniprot_id=uniprot_id)
+                references_to_add.append(new_reference)
+            else:
+                missing.add(uniprot_id)
+
+    proteins_to_add = proteins_to_add + duplicate_filter(references_to_add, ('cohort_id', 'uniprot_id'))
+    print(f"{len(missing)} uniprot ids could not be mapped: {missing}")
     return proteins_to_add
