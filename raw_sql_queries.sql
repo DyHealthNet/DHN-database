@@ -7,25 +7,6 @@ ALTER TABLE genomic_variant
 RENAME COLUMN "variant_primaryDomainId" TO clinvar_id;
 
 
--- this is for typeahead search
-CREATE MATERIALIZED VIEW view_description_fts AS
-SELECT 'disorder' AS source_table, mondo_id AS id, description, NULL AS display_name FROM disorder
-UNION ALL
-SELECT 'metabolite' AS source_table, hmdb_id AS id, description, display_name FROM metabolite
-UNION ALL
-SELECT 'gene' AS source_table, entrez_id AS id, description, display_name FROM gene
-UNION ALL
-SELECT 'protein' AS source_table, uniprot_id AS id, description, NULL AS display_name FROM protein
-UNION ALL
-SELECT 'phenotype' AS source_table, hpo_id AS id, description, display_name FROM phenotype;
-
--- drop the materialized view if it already exists
-DROP VIEW view_description_fts;
-
-SELECT *
-FROM view_description_fts
-WHERE display_name ILIKE 'rca%' OR description ILIKE 'brca%' or id ILIKE 'brca%';
-
 -- typeahead search using the cohort information
 CREATE VIEW view_cohort_fts AS
 SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
@@ -134,4 +115,29 @@ FROM view_description_fts
 WHERE to_tsvector('english', description) @@ plainto_tsquery('english','A2 receptor') OR
 id ILIKE 'A2 receptor%' OR
 display_name ILIKE 'A2 receptor%'
+LIMIT 10;
+
+-- some more indexes
+CREATE INDEX idx_effects_protein_pheno ON effects_protein_phenotype(protein_id);
+CREATE INDEX idx_effects_protein_metab ON effects_protein_metabolite(protein_id);
+
+
+-- test queries
+
+SELECT *
+FROM "effects_protein_protein"
+WHERE ("effects_protein_protein"."protein_id_1" = 'x0so1193' OR
+       "effects_protein_protein"."protein_id_2" = 'x0so1193')
+ORDER BY "effects_protein_protein"."p_value" ASC
+LIMIT 10;
+
+SELECT *
+FROM "effects_protein_metabolite"
+WHERE "effects_protein_metabolite"."protein_id" = 'x0so1193'
+ORDER BY "effects_protein_metabolite"."p_value" ASC LIMIT 10;
+
+SELECT *
+FROM "effects_protein_phenotype"
+WHERE "effects_protein_phenotype"."protein_id" = 'x0so1193'
+ORDER BY "effects_protein_phenotype"."p_value" ASC
 LIMIT 10;

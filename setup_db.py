@@ -542,6 +542,14 @@ def add_indexes(session, engine, metadata):
     if not session.execute(text("SELECT to_regclass('idx_uniprot_id_2')")).scalar():
         idx_uniprot_id_2.create(engine)
 
+    idx_effects_protein_pheno = Index('idx_effects_protein_pheno', EffectsProteinPhenotype.protein_id)
+    if not session.execute(text("SELECT to_regclass('idx_effects_protein_pheno')")).scalar():
+        idx_effects_protein_pheno.create(engine)
+
+    idx_effects_protein_metabo = Index('idx_effects_protein_metabo', EffectsProteinMetabolite.protein_id)
+    if not session.execute(text("SELECT to_regclass('idx_effects_protein_metabo')")).scalar():
+        idx_effects_protein_metabo.create(engine)
+
     # Index for quick typeahead search
     view_description_fts = Table('view_description_fts', metadata, autoload_with=engine)
     idx_display_name_fts = Index('idx_display_name_fts', view_description_fts.c.display_name)
@@ -554,6 +562,7 @@ def add_indexes(session, engine, metadata):
         return
     session.execute(text("CREATE INDEX idx_description_fts "
                          "ON view_description_fts USING gin(to_tsvector('english', description));"))
+    print("Created indexes")
     session.commit()
 
 
@@ -576,6 +585,7 @@ def add_views(session):
     SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display_name FROM cohort_phenotype;
     """
     session.execute(text(view_sql))
+    print("Created view view_description_fts.")
     session.commit()
 
 
