@@ -5,28 +5,8 @@ from models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, C
 import pandas as pd
 
 
-def duplicate_filter(objects: list, identify_columns: tuple) -> list:
-    """
-    Filter out duplicates from a list of objects based on the values of the columns in identify_columns.
-    :param objects: A list of SQLAlchemy objects to filter
-    :param identify_columns: A tuple of column names to use to identify duplicates
-    :return: A list of objects with duplicates removed
-    """
-    # filter out duplicates
-    reduced = []
-    seen = set()
-    for x in objects:
-        identifier = tuple(getattr(x, col) for col in identify_columns)
-        if identifier not in seen:
-            seen.add(identifier)
-            reduced.append(x)
-    return reduced
-
-
-def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> list:
+def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> tuple[list, list, list]:
     print("Adding cohort phenotype data to the database.")
-    # read the phenotype data
-    raw_phenotypes = pd.read_csv(phenotype_path, sep='\t')
     # from the database, get the snomed ids and associated hpo ids/ mondo ids
     phenotypes = session.query(Phenotype).filter(Phenotype.observation_source == obs_source).all()
     disorders = session.query(Disorder).filter(Disorder.observation_source == obs_source).all()
@@ -37,43 +17,44 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
         {[y.split('.')[1] for y in x.xrefs if y.startswith('snomedct.')][0]: x.mondo_id for x in disorders})
 
     print(f"Length of snomed map: {len(snomed_map)}")
+    # read the phenotype data
+    raw_phenotypes = pd.read_csv(phenotype_path, sep='\t')
+    raw_phenotypes['snomed_id'] = raw_phenotypes['snomed_id'].fillna('')
     # go through the raw phenotype data and add the phenotypes to the database
     phenotypes_to_add = []
     disorder_references_to_add = []
     phenotype_references_to_add = []
     missing = set()
     for index, row in raw_phenotypes.iterrows():
-        snomed_id = row['snomed_id']
 
         new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=row['snomed_term'],
                                         description=row['description'])
         phenotypes_to_add.append(new_phenotype)
 
         mondo_id = hpo_id = None
-        if snomed_id in snomed_map:
-            if snomed_map[snomed_id].startswith('hpo'):
-                hpo_id = snomed_map[snomed_id]
+        for snomed_id in row['snomed_id'].split(";"):
+            snomed_id = snomed_id.strip()
+            if snomed_id in snomed_map:
+                if snomed_map[snomed_id].startswith('hpo'):
+                    hpo_id = snomed_map[snomed_id]
+                else:
+                    mondo_id = snomed_map[snomed_id]
+
+            # add the references to the knowledge graph for the phenotypes
+            if hpo_id:
+                new_reference = CohortReferencesPhenotype(cohort_id=row['label'], hpo_id=hpo_id)
+                disorder_references_to_add.append(new_reference)
+            elif mondo_id:
+                new_reference = CohortReferencesDisease(cohort_id=row['label'], mondo_id=mondo_id)
+                phenotype_references_to_add.append(new_reference)
             else:
-                mondo_id = snomed_map[snomed_id]
+                missing.add(snomed_id)
 
-        # add the references to the knowledge graph for the phenotypes
-        if hpo_id:
-            new_reference = CohortReferencesPhenotype(cohort_id=row['label'], hpo_id=hpo_id)
-            disorder_references_to_add.append(new_reference)
-        elif mondo_id:
-            new_reference = CohortReferencesDisease(cohort_id=row['label'], mondo_id=mondo_id)
-            phenotype_references_to_add.append(new_reference)
-        else:
-            missing.add(snomed_id)
-
-    phenotypes_to_add = (duplicate_filter(phenotypes_to_add, ('cohort_id',)) +
-                         duplicate_filter(disorder_references_to_add, ('cohort_id', 'hpo_id')) +
-                         duplicate_filter(phenotype_references_to_add, ('cohort_id', 'mondo_id')))
     print(f"{len(missing)} snomed ids could not be mapped: {missing}")
-    return phenotypes_to_add
+    return phenotypes_to_add, disorder_references_to_add, phenotype_references_to_add
 
 
-def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None) -> list:
+def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None) -> tuple[list, list]:
     print("Adding cohort metabolite data to the database.")
     metabolite_matches = session.query(Metabolite).filter(Metabolite.observation_source == obs_source).all()
     metabolite_map = {x.hmdb_id: x.hmdb_id for x in metabolite_matches}
@@ -103,12 +84,11 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
             else:
                 missing.add(hmdb_id)
 
-    metabolites_to_add = metabolites_to_add + duplicate_filter(references_to_add, ('cohort_id', 'hmdb_id'))
     print(f"{len(missing)} hmdb ids could not be mapped: {missing}")
-    return metabolites_to_add
+    return metabolites_to_add, references_to_add
 
 
-def cohort_protein_data(session, protein_path: str = None, obs_source: str = None) -> list:
+def cohort_protein_data(session, protein_path: str = None, obs_source: str = None) -> tuple[list, list]:
     print("Adding cohort protein data to the database.")
     protein_matches = session.query(Protein).filter(Protein.observation_source == obs_source).all()
     protein_map = {x.uniprot_id: x.display_name for x in protein_matches}
@@ -134,6 +114,5 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
             else:
                 missing.add(uniprot_id)
 
-    proteins_to_add = proteins_to_add + duplicate_filter(references_to_add, ('cohort_id', 'uniprot_id'))
     print(f"{len(missing)} uniprot ids could not be mapped: {missing}")
-    return proteins_to_add
+    return proteins_to_add, references_to_add

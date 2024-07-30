@@ -182,8 +182,7 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     """
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
-        with session.no_autoflush:
-            exists = session.query(column).filter_by(**filter_values).first()
+        exists = session.query(column).filter_by(**filter_values).first()
         if exists is not None and DEBUG:
             # remove existing item
             try:
@@ -315,25 +314,29 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
 
 def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None):
-    phenotypes_to_add = cohort_phenotype_data(session, phenotype_path, obs_source)
+    phenotypes_to_add, phenotype_refs, disorder_refs = cohort_phenotype_data(session, phenotype_path, obs_source)
 
     add_items(session, phenotypes_to_add, CohortPhenotype, ['cohort_id'])
+    add_items(session, phenotype_refs, CohortReferencesPhenotype, ['cohort_id', 'hpo_id'])
+    add_items(session, disorder_refs, CohortReferencesDisease, ['cohort_id', 'mondo_id'])
     session.commit()
     print(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
 
 
 def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None):
-    metabolites_to_add = cohort_metabolite_data(session, metabolite_path, obs_source)
+    metabolites_to_add, metabolite_refs = cohort_metabolite_data(session, metabolite_path, obs_source)
 
     add_items(session, metabolites_to_add, CohortMetabolite, ['cohort_id'])
+    add_items(session, metabolite_refs, CohortReferencesMetabolite, ['cohort_id', 'hmdb_id'])
     session.commit()
     print(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
 
 
 def add_cohort_protein_data(session, protein_path: str = None, obs_source: str = None):
-    proteins_to_add = cohort_protein_data(session, protein_path, obs_source)
+    proteins_to_add, protein_refs = cohort_protein_data(session, protein_path, obs_source)
 
     add_items(session, proteins_to_add, CohortProtein, ['cohort_id'])
+    add_items(session, protein_refs, CohortReferencesProtein, ['cohort_id', 'uniprot_id'])
     session.commit()
     print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
@@ -581,7 +584,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    delete_tables(db_session)
+    # delete_tables(db_session)
 
     metadata = MetaData()
     create_tables()
@@ -593,25 +596,25 @@ if __name__ == '__main__':
     data_dir = DATA_DIR
 
     # testingSetup(session)
-    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-
+    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-
-    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # add_genomic_variants(db_session, gene_ids, observation_source='external')
-
-    # second pass for phenotypes
-    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
-
-    # add cohort phenotype data as the mapping is incomplete
-    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
-    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-
-    # add the edges calculated from the available data
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #
+    # # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    # # add_genomic_variants(db_session, gene_ids, observation_source='external')
+    #
+    # # second pass for phenotypes
+    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+    #
+    # # add cohort phenotype data as the mapping is incomplete
+    # add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    #
+    # # add the edges calculated from the available data
+    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)

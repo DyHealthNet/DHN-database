@@ -76,7 +76,10 @@ def read_proteinID_chris(proteinID_path: str):
     df = pd.read_csv(proteinID_path, sep='\t')
     # check how many nans in the uniprot ocl
     print("Number of nans in UniProt col:", df['UniProt'].isna().sum())
-    return df['UniProt'].unique()
+    df['UniProt'] = df['UniProt'].fillna('')
+    uniprot_ids = df['UniProt'].str.split('|')
+    uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
+    return uniprot_ids
 
 
 def retrieve_interacting_proteins_neo4j(protein_ids):
