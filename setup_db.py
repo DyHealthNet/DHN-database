@@ -621,10 +621,6 @@ def add_views(session):
 
     # create new view called view_associations_edges
     view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
-    if view_exists and DEBUG:
-        # drop the view
-        session.execute(text("DROP VIEW view_associations_edges;"))
-        view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
     if view_exists is None:
         view_sql = """
         CREATE MATERIALIZED VIEW view_associations_edges AS

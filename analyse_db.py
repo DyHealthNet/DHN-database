@@ -1,5 +1,6 @@
 #%%
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 from setup_db import engine
 from models import *
 import inspect
