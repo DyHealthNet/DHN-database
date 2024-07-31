@@ -43,8 +43,9 @@ class Gene(Base):
 class Disorder(Base):
     __tablename__ = 'disorder'
     mondo_id = Column(String, primary_key=True)
+    display_name = Column(String)
     description = Column(String)
-    xrefs = Column(ARRAY(String))  # take from nedrex
+    xrefs = Column(ARRAY(String))
     observation_source = Column(String)
 
 

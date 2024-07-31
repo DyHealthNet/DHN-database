@@ -66,10 +66,11 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
 
 
 def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
-                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph, obs_source: str = None) -> \
-        tuple[set, set, set, int]:
+                           xrefs: dict, display_names: dict, gene_info: dict, assoc_graph: nx.Graph,
+                           obs_source: str = None) -> tuple[set, set, set, int]:
     """
     Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
+    :param display_names: Display names for the mondo ids
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
     :param xrefs: cross references for the mondo ids to other databases
     :param descriptions: descriptions for the mondo ids
@@ -91,6 +92,7 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
             mondo_id = snomed_to_mondo.get(snomed_id)
             xref = xrefs.get(mondo_id, None)
             description = descriptions.get(mondo_id, None)
+            display_name = display_names.get(mondo_id, None)
             genes, sources = mondo_in_association_graph(mondo_id, assoc_graph)
             if genes is None:
                 continue
@@ -110,7 +112,11 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
                 genes_to_add.add(new_gene)
 
             disorders.add(
-                Disorder(mondo_id=mondo_id, xrefs=xref, description=description, observation_source=obs_source))
+                Disorder(mondo_id=mondo_id,
+                         display_name=display_name,
+                         xrefs=xref,
+                         description=description,
+                         observation_source=obs_source))
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
@@ -226,6 +232,7 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
 
     data = {x['primaryDomainId']: x for x in data}
     xrefs = {mondo: data[mondo]['domainIds'] for mondo in domain_to_mondo.values() if 'domainIds' in data[mondo]}
+    display_names = {mondo: data[mondo]['displayName'] for mondo in domain_to_mondo.values()}
     assoc_graph = get_edge_associations(set(domain_to_mondo.values()), edge_type='gene_associated_with_disorder')
     # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
     # all associated with the mondo ids
@@ -235,8 +242,8 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
     genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
-                                                                               mondo_description, xrefs, gene_dict,
-                                                                               assoc_graph, obs_source)
+                                                                               mondo_description, xrefs, display_names,
+                                                                               gene_dict, assoc_graph, obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
