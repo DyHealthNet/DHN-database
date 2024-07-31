@@ -563,6 +563,16 @@ def add_indexes(session, engine, metadata):
     if not session.execute(text("SELECT to_regclass('idx_display_name_fts')")).scalar():
         idx_display_name_fts.create(engine)
 
+    # add index for view_associations_edges
+    view_associations_edges = Table('view_associations_edges', metadata, autoload_with=engine)
+    idx_assoc_source_id = Index('idx_source_id', view_associations_edges.c.source_id)
+    if not session.execute(text("SELECT to_regclass('idx_assoc_source_id')")).scalar():
+        idx_assoc_source_id.create(engine)
+
+    idx_assoc_target_id = Index('idx_target_id', view_associations_edges.c.target_id)
+    if not session.execute(text("SELECT to_regclass('idx_assoc_target_id')")).scalar():
+        idx_assoc_target_id.create(engine)
+
     # add the last index that doesn't work well with sqlalchemy
     if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
         print("Index idx_description_fts already exists.")
@@ -611,9 +621,13 @@ def add_views(session):
 
     # create new view called view_associations_edges
     view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
+    if view_exists and DEBUG:
+        # drop the view
+        session.execute(text("DROP VIEW view_associations_edges;"))
+        view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
     if view_exists is None:
         view_sql = """
-        CREATE VIEW view_associations_edges AS
+        CREATE MATERIALIZED VIEW view_associations_edges AS
         SELECT uniprot_id_1 AS source_id, uniprot_id_2 AS target_id FROM protein_associates_protein
         UNION ALL
         SELECT uniprot_id AS source_id, hmdb_id AS target_id FROM protein_associates_metabolite
@@ -628,6 +642,9 @@ def add_views(session):
         """
         session.execute(text(view_sql))
         print("Created view view_associations_edges.")
+    else:
+        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
+        print("View view_associations_edges already exists. Refreshed.")
     session.commit()
 
 
