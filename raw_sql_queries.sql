@@ -8,7 +8,7 @@ RENAME COLUMN "variant_primaryDomainId" TO clinvar_id;
 
 
 -- typeahead search using the cohort information
-CREATE VIEW view_cohort_fts AS
+CREATE MATERIALIZED VIEW view_cohort_fts AS
 SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
 UNION ALL
 SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, display_name FROM cohort_metabolite
@@ -23,6 +23,44 @@ DROP VIEW view_cohort_fts;
 
 CREATE INDEX idx_description_fts ON view_description_fts USING gin(to_tsvector('english', description));
 CREATE INDEX idx_display_name ON view_description_fts (display_name);
+
+-- create materialized view for references edges
+CREATE VIEW view_references_edges AS
+SELECT 'protein' AS source_table, cohort_id, uniprot_id as reference_id FROM cohort_references_protein
+UNION ALL
+SELECT 'metabolite' AS source_table, cohort_id, hmdb_id as reference_id FROM cohort_references_metabolite
+UNION ALL
+SELECT 'phenotype' AS source_table, cohort_id, hpo_id as reference_id FROM cohort_references_phenotype
+UNION ALL
+SELECT 'disease' AS source_table, cohort_id, mondo_id as reference_id FROM cohort_references_disease;
+
+WITH nodes AS (
+    SELECT UNNEST(ARRAY['uniprot.Q9BUT1', 'uniprot.Q3SXY7', 'hmdb.HMDB0000011', 'uniprot.P22087', 'uniprot.P28908',
+        'uniprot.Q13421', 'uniprot.Q9UM07', 'uniprot.Q96DN0', 'hmdb.HMDB0008189']) AS node_id
+)
+SELECT * FROM view_references_edges
+WHERE reference_id IN (SELECT node_id FROM nodes);
+
+-- create view for association edges
+CREATE VIEW view_associations_edges AS
+SELECT uniprot_id_1 AS source_id, uniprot_id_2 AS target_id FROM protein_associates_protein
+UNION ALL
+SELECT uniprot_id AS source_id, hmdb_id AS target_id FROM protein_associates_metabolite
+UNION ALL
+SELECT mondo_id AS source_id, hpo_id AS target_id FROM disorder_associates_phenotype
+UNION ALL
+SELECT entrez_id AS source_id, mondo_id AS target_id FROM gene_associates_disorder
+UNION ALL
+SELECT hmdb_id AS source_id, mondo_id AS target_id FROM metabolite_associates_disorder
+UNION ALL
+SELECT genomic_variant AS source_id, entrez_id AS target_id FROM variant_affects_gene;
+
+
+SELECT *
+FROM view_associations_edges
+WHERE source_id = 'uniprot.P31937' OR target_id = 'uniprot.P31937';
+
+
 
 -- list all indices
 SELECT *

@@ -580,19 +580,54 @@ def add_views(session):
         session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
         session.commit()
         print("View view_description_fts already exists. Refreshed.")
-        return
+    else:
+        # sql alchemy doesn't support creating views, so we have to use raw sql
+        view_sql = """
+        CREATE MATERIALIZED VIEW view_description_fts AS
+        SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
+        UNION ALL
+        SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, display_name FROM cohort_metabolite
+        UNION ALL
+        SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display_name FROM cohort_phenotype;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_description_fts.")
 
-    # sql alchemy doesn't support creating views, so we have to use raw sql
-    view_sql = """
-    CREATE MATERIALIZED VIEW view_description_fts AS
-    SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
-    UNION ALL
-    SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, display_name FROM cohort_metabolite
-    UNION ALL
-    SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display_name FROM cohort_phenotype;
-    """
-    session.execute(text(view_sql))
-    print("Created view view_description_fts.")
+    # create new view called view_references_edges
+    view_exists = session.execute(text("SELECT to_regclass('view_references_edges')")).scalar()
+    if view_exists is None:
+        view_sql = """
+        CREATE VIEW view_references_edges AS
+        SELECT 'protein' AS source_table, cohort_id, uniprot_id as reference_id FROM cohort_references_protein
+        UNION ALL
+        SELECT 'metabolite' AS source_table, cohort_id, hmdb_id as reference_id FROM cohort_references_metabolite
+        UNION ALL
+        SELECT 'phenotype' AS source_table, cohort_id, hpo_id as reference_id FROM cohort_references_phenotype
+        UNION ALL
+        SELECT 'disease' AS source_table, cohort_id, mondo_id as reference_id FROM cohort_references_disease;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_references_edges.")
+
+    # create new view called view_associations_edges
+    view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
+    if view_exists is None:
+        view_sql = """
+        CREATE VIEW view_associations_edges AS
+        SELECT uniprot_id_1 AS source_id, uniprot_id_2 AS target_id FROM protein_associates_protein
+        UNION ALL
+        SELECT uniprot_id AS source_id, hmdb_id AS target_id FROM protein_associates_metabolite
+        UNION ALL
+        SELECT mondo_id AS source_id, hpo_id AS target_id FROM disorder_associates_phenotype
+        UNION ALL
+        SELECT entrez_id AS source_id, mondo_id AS target_id FROM gene_associates_disorder
+        UNION ALL
+        SELECT hmdb_id AS source_id, mondo_id AS target_id FROM metabolite_associates_disorder
+        UNION ALL
+        SELECT genomic_variant AS source_id, entrez_id AS target_id FROM variant_affects_gene;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_associations_edges.")
     session.commit()
 
 
