@@ -100,9 +100,9 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
     references_to_add = []
     missing = set()
     for index, row in raw_proteins.iterrows():
-        name = row['protein_id']
-        new_protein = CohortProtein(cohort_id=name,
-                                    display_name=row['Target'],
+        display_name = ", ".join([protein_map.get(x, x) for x in row['UniProt'].split('|')])
+        new_protein = CohortProtein(cohort_id=row['protein_id'],
+                                    display_name=display_name,
                                     description=row['long_description'],
                                     xrefs=row['UniProt'])
         proteins_to_add.append(new_protein)
@@ -111,7 +111,7 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
         for uniprot_id in row['UniProt'].split('|'):
             uniprot_id = f"uniprot.{uniprot_id}"
             if uniprot_id in protein_map:
-                new_reference = CohortReferencesProtein(cohort_id=name, uniprot_id=uniprot_id)
+                new_reference = CohortReferencesProtein(cohort_id=row['protein_id'], uniprot_id=uniprot_id)
                 references_to_add.append(new_reference)
             else:
                 missing.add(uniprot_id)
