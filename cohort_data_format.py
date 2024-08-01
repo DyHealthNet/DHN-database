@@ -28,7 +28,7 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
     for index, row in raw_phenotypes.iterrows():
 
         new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=row['snomed_term'],
-                                        description=row['description'])
+                                        description=row['description'], xrefs=row['snomed_id'])
         phenotypes_to_add.append(new_phenotype)
 
         mondo_id = hpo_id = None
@@ -70,7 +70,8 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
     for index, row in raw_metabolites.iterrows():
         new_metabolite = CohortMetabolite(cohort_id=row['analyte_name'],
                                           display_name=row['biochemical_name'],
-                                          description=row['analyte_class'])
+                                          description=row['analyte_class'],
+                                          xrefs=row['hmdb_id'])
 
         metabolites_to_add.append(new_metabolite)
 
@@ -102,7 +103,8 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
         name = row['protein_id']
         new_protein = CohortProtein(cohort_id=name,
                                     display_name=row['Target'],
-                                    description=row['long_description'])
+                                    description=row['long_description'],
+                                    xrefs=row['UniProt'])
         proteins_to_add.append(new_protein)
 
         # add the references to the knowledge graph for the proteins

@@ -34,6 +34,8 @@ def delete_tables(session):
     print("Removing all tables from the database.")
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
+    session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
+    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
     session.commit()
     Base.metadata.drop_all(engine, checkfirst=True)
 
@@ -594,11 +596,14 @@ def add_views(session):
         # sql alchemy doesn't support creating views, so we have to use raw sql
         view_sql = """
         CREATE MATERIALIZED VIEW view_description_fts AS
-        SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein
+        SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_protein
         UNION ALL
-        SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, display_name FROM cohort_metabolite
+        SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_metabolite
         UNION ALL
-        SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, display_name FROM cohort_phenotype;
+        SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_phenotype;
         """
         session.execute(text(view_sql))
         print("Created view view_description_fts.")
@@ -649,7 +654,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    # delete_tables(db_session)
+    delete_tables(db_session)
 
     metadata = MetaData()
     create_tables()

@@ -12,6 +12,7 @@ class CohortPhenotype(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
+    xrefs = Column(String)
 
 
 class CohortProtein(Base):
@@ -19,6 +20,7 @@ class CohortProtein(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
+    xrefs = Column(String)
 
 
 class CohortMetabolite(Base):
@@ -26,6 +28,7 @@ class CohortMetabolite(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
+    xrefs = Column(String)
 
 
 ### Tables of data from the external knowledge graph ###
