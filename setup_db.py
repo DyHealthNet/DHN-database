@@ -665,6 +665,12 @@ if __name__ == '__main__':
     edges_path = EDGES_PATH
     data_dir = DATA_DIR
 
+    if not all([pheno_data_path, protein_data_path, metabo_data_path, edges_path]):
+        raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
+
+    if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path, edges_path]]):
+        raise ValueError("Some of the provided paths do not exist.")
+
     # testingSetup(session)
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
