@@ -8,11 +8,11 @@ DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 
 # Database settings
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_USER = os.getenv('DATABASE_USER')
+DB_PASSWORD = os.getenv('DATABASE_PASS')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
-DB_NAME = os.getenv('DB_NAME')
+DB_NAME = os.getenv('DATABASE_NAME')
 
 # Name of the cohort study
 OBSERVATIONS = os.getenv("OBSERVATION_SOURCE")
