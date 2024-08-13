@@ -568,11 +568,11 @@ def add_indexes(session, engine, metadata):
     # add index for view_associations_edges
     view_associations_edges = Table('view_associations_edges', metadata, autoload_with=engine)
     idx_assoc_source_id = Index('idx_source_id', view_associations_edges.c.source_id)
-    if not session.execute(text("SELECT to_regclass('idx_assoc_source_id')")).scalar():
+    if not session.execute(text("SELECT to_regclass('idx_source_id')")).scalar():
         idx_assoc_source_id.create(engine)
 
     idx_assoc_target_id = Index('idx_target_id', view_associations_edges.c.target_id)
-    if not session.execute(text("SELECT to_regclass('idx_assoc_target_id')")).scalar():
+    if not session.execute(text("SELECT to_regclass('idx_target_id')")).scalar():
         idx_assoc_target_id.create(engine)
 
     # add the last index that doesn't work well with sqlalchemy

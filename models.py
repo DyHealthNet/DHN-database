@@ -138,6 +138,7 @@ class EffectsProteinProtein(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsProteinMetabolite(Base):
@@ -149,6 +150,7 @@ class EffectsProteinMetabolite(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsProteinPhenotype(Base):
@@ -160,6 +162,7 @@ class EffectsProteinPhenotype(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsMetaboliteMetabolite(Base):
@@ -171,6 +174,7 @@ class EffectsMetaboliteMetabolite(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsMetabolitePhenotype(Base):
@@ -182,6 +186,7 @@ class EffectsMetabolitePhenotype(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsPhenotypePhenotype(Base):
@@ -193,6 +198,7 @@ class EffectsPhenotypePhenotype(Base):
     adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 # Associations between entities in the external knowledge graph

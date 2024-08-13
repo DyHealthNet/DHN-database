@@ -160,7 +160,8 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
         'p_value': valid_edges['pval'].values,
         'adjusted_p_value': valid_edges['adj_pval'].values,
         'effect_size': valid_edges['effsize'].values,
-        'effect_size_type': valid_edges['effsize_type'].values
+        'effect_size_type': valid_edges['effsize_type'].values,
+        'test_statistic': valid_edges['test'].values
     })
 
     formatted_edges_list = []
@@ -174,7 +175,8 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
                 'p_value': row['p_value'],
                 'adjusted_p_value': row['adjusted_p_value'],
                 'effect_size': row['effect_size'],
-                'effect_size_type': row['effect_size_type']
+                'effect_size_type': row['effect_size_type'],
+                'test_statistic': row['test_statistic']
             })
             formatted_edges_list.append(edge)
 
@@ -281,7 +283,7 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     db_session = Session()
 
-    edges_path = '../data/scores.csv'
+    edges_path = '../data/scores_including_tests.csv'
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
