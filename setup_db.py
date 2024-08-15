@@ -1,32 +1,26 @@
-import os
-
 import networkx as nx
-from nedrex.core import iter_edges, iter_nodes, get_nodes, get_collection_attributes, get_edge_types
-from sqlalchemy import URL, create_engine, text, Table, MetaData
+from settings import *
+from testcases import *
+from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase
+from calculated_edges import add_calculated_edges
+from sqlalchemy import URL, text, Table, MetaData
+from protein_mapping import read_proteinID_chris, get_protein_nodes
 
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
-from models import *
+from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
-from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from protein_mapping import read_proteinID_chris, get_protein_nodes
-from calculated_edges import add_calculated_edges
-from testcases import *
-import dotenv
 
-dotenv.load_dotenv()
-
-# create postrgres db engine in memory
 url = url_object = URL.create(
     "postgresql",
-    username=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),  # plain (unescaped) text
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT"),
-    database=os.getenv("DB_NAME"),
+    username=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT,
+    database=DB_NAME,
 )
 engine = create_engine(url)
 
@@ -36,17 +30,14 @@ def create_tables():
     Base.metadata.create_all(engine)
 
 
-def example_query(session):
-    # Querying the database
-    results = (session
-               .query(Gene, Phenotype)
-               .join(GeneAssocDisorder, Gene.entrez_id == GeneAssocDisorder.entrez_id)
-               .filter(Gene.entrez_id == "12345")
-               .all())
-    for gene, phenotype in results:
-        print(
-            f"Gene entrez_id: {gene.entrez_id}, Phenotype hpo_id: {phenotype.hpo_id},"
-            f" SNOMED ID: {phenotype.snomed_id}, OMIM ID: {phenotype.omim_id}")
+def delete_tables(session):
+    print("Removing all tables from the database.")
+    # sql alchemy doesn't support dropping views, so we have to use raw sql
+    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
+    session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
+    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
+    session.commit()
+    Base.metadata.drop_all(engine, checkfirst=True)
 
 
 def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[list[str], list[str]] | tuple[None, None]:
@@ -77,10 +68,11 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
 
 
 def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
-                           xrefs: dict, gene_info: dict, assoc_graph: nx.Graph, obs_source: str = None) -> tuple[
-    set, set, set, int]:
+                           xrefs: dict, display_names: dict, gene_info: dict, assoc_graph: nx.Graph,
+                           obs_source: str = None) -> tuple[set, set, set, int]:
     """
     Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
+    :param display_names: Display names for the mondo ids
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
     :param xrefs: cross references for the mondo ids to other databases
     :param descriptions: descriptions for the mondo ids
@@ -88,7 +80,8 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
     :param snomed_to_mondo: map from snomed to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
     :param obs_source: Describes the source of observations - e.g. CHRIS
-    :return: list of genes to add, list of disorders to add, list of gene associations to add, number of snomed ids found
+    :return: list of genes to add, list of disorders to add, list of gene associations to add,
+    number of snomed ids found
     """
     gene_associations = set()
     genes_to_add = set()
@@ -101,6 +94,7 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
             mondo_id = snomed_to_mondo.get(snomed_id)
             xref = xrefs.get(mondo_id, None)
             description = descriptions.get(mondo_id, None)
+            display_name = display_names.get(mondo_id, None)
             genes, sources = mondo_in_association_graph(mondo_id, assoc_graph)
             if genes is None:
                 continue
@@ -120,7 +114,11 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
                 genes_to_add.add(new_gene)
 
             disorders.add(
-                Disorder(mondo_id=mondo_id, xrefs=xref, description=description, observation_source=obs_source))
+                Disorder(mondo_id=mondo_id,
+                         display_name=display_name,
+                         xrefs=xref,
+                         description=description,
+                         observation_source=obs_source))
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
@@ -193,7 +191,14 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
         exists = session.query(column).filter_by(**filter_values).first()
-        if exists is not None:
+        if exists is not None and DEBUG:
+            # remove existing item
+            try:
+                session.delete(exists)
+            except SQLAlchemyError as e:
+                session.rollback()
+                print("Could not delete existing item: ", e, "moving on...")
+        elif exists is not None:
             continue
         try:
             session.add(item)
@@ -229,6 +234,7 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
 
     data = {x['primaryDomainId']: x for x in data}
     xrefs = {mondo: data[mondo]['domainIds'] for mondo in domain_to_mondo.values() if 'domainIds' in data[mondo]}
+    display_names = {mondo: data[mondo]['displayName'] for mondo in domain_to_mondo.values()}
     assoc_graph = get_edge_associations(set(domain_to_mondo.values()), edge_type='gene_associated_with_disorder')
     # assoc_graph is filtered for ids that we need, now we can get the data for all genes in the graph since they're
     # all associated with the mondo ids
@@ -238,8 +244,8 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
     genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
-                                                                               mondo_description, xrefs, gene_dict,
-                                                                               assoc_graph, obs_source)
+                                                                               mondo_description, xrefs, display_names,
+                                                                               gene_dict, assoc_graph, obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
@@ -316,9 +322,41 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
     print(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
+def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None):
+    phenotypes_to_add, phenotype_refs, disorder_refs = cohort_phenotype_data(session, phenotype_path, obs_source)
+
+    add_items(session, phenotypes_to_add, CohortPhenotype, ['cohort_id'])
+    add_items(session, phenotype_refs, CohortReferencesPhenotype, ['cohort_id', 'hpo_id'])
+    add_items(session, disorder_refs, CohortReferencesDisease, ['cohort_id', 'mondo_id'])
+    session.commit()
+    print(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
+
+
+def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None):
+    metabolites_to_add, metabolite_refs = cohort_metabolite_data(session, metabolite_path, obs_source)
+
+    add_items(session, metabolites_to_add, CohortMetabolite, ['cohort_id'])
+    add_items(session, metabolite_refs, CohortReferencesMetabolite, ['cohort_id', 'hmdb_id'])
+    session.commit()
+    print(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
+
+
+def add_cohort_protein_data(session, protein_path: str = None, obs_source: str = None):
+    proteins_to_add, protein_refs = cohort_protein_data(session, protein_path, obs_source)
+
+    add_items(session, proteins_to_add, CohortProtein, ['cohort_id'])
+    add_items(session, protein_refs, CohortReferencesProtein, ['cohort_id', 'uniprot_id'])
+    session.commit()
+    print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
+
+
 def add_protein_data(session, proteinData_path, obs_source):
     proteinIds = read_proteinID_chris(proteinData_path)
-    proteinNodes = get_protein_nodes(proteinIds, obs_source)
+    proteinNodes, found_proteins = get_protein_nodes(proteinIds, obs_source)
+    needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in proteinIds}
+    print(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
+          f"{len(needed_ids - found_proteins) - 5} more")
+
     available_proteins = {x.uniprot_id for x in proteinNodes}
     print(f"Got {len(proteinNodes)} protein nodes")
     proteinInteractions = get_protein_interactions(available_proteins)
@@ -336,16 +374,16 @@ def get_protein_interactions(proteinIds):
     for edge in assoc_graph.edges():
         uniprot_id_memberOne = edge[0]
         uniprot_id_memberTwo = edge[1]
-        if(uniprot_id_memberTwo in proteinIds and uniprot_id_memberOne in proteinIds):
-            proteinInteractions.append(ProteinAssocProtein(uniprot_id_memberOne=uniprot_id_memberOne,
-                                                           uniprot_id_memberTwo=uniprot_id_memberTwo))
+        if (uniprot_id_memberTwo in proteinIds and uniprot_id_memberOne in proteinIds):
+            proteinInteractions.append(ProteinAssocProtein(uniprot_id_1=uniprot_id_memberOne,
+                                                           uniprot_id_2=uniprot_id_memberTwo))
     return proteinInteractions
 
 
 def get_additional_diseases(session, obs_source: str = None):
     # I know this defeats the purpose of SQLAlchemy but I could not find a way to do this with the ORM
     sql_string = f"""SELECT xrefs
-                    FROM disorders
+                    FROM disorder
                     WHERE EXISTS (
                         SELECT 1
                         FROM unnest(xrefs) AS xref
@@ -367,7 +405,8 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     print(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
     omim_diseases = get_additional_diseases(session, obs_source)
 
-    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites, omim_ids=omim_diseases)
+    hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites, omim_ids=omim_diseases,
+                                  observation_source=obs_source)
     print(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
           f"{len(unique_metabolites)} metabolites in the mapping file.")
 
@@ -385,7 +424,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     prots, diseases = retrieve_assoc_metabolite_nodes(hmdb_mapping)
     missing_proteins = {x for x in prots if session.query(Protein).filter_by(uniprot_id=x).first() is None}
     missing_diseases = {x for x in diseases if session.query(Disorder)
-                        .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
+    .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
 
     add_missing(session, missing_diseases, 'disorders')
     # add_missing(session, missing_proteins, 'proteins')
@@ -397,7 +436,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                                       description=hmdb_mapping[metabolite]['description'],
                                       synonyms=hmdb_mapping[metabolite]['synonyms'],
                                       xrefs=hmdb_mapping[metabolite]['xrefs'],
-                                      observation_source=obs_source))
+                                      observation_source=hmdb_mapping[metabolite]['observation_source']))
 
         for disease in hmdb_mapping[metabolite]['diseases']:
             if session.query(Disorder).filter_by(mondo_id=omim_mapping.get(f"omim.{disease}", None)).first() is None:
@@ -420,7 +459,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     session.commit()
 
 
-def add_genomic_variants(session, entrez_ids: set[str] = None, observation_source: str = None) -> list[dict]:
+def add_genomic_variants(session, entrez_ids: set[str] = None, observation_source: str = None):
     variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
                                                        direction='directed')  # Graph with 1511628 nodes and 1539719 edges
     print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
@@ -452,7 +491,7 @@ def add_genomic_variants(session, entrez_ids: set[str] = None, observation_sourc
     genes = []
     available_variants = {variant.variant_primaryDomainId for variant in variants_to_add}
     for variant, gene in variant_affects_gene_dict.items():
-        if(variant in available_variants and gene in entrez_ids):
+        if (variant in available_variants and gene in entrez_ids):
             variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
     add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'genomic_variant'])
     session.commit()
@@ -501,40 +540,164 @@ def testingSetup(session):
     test = 2
 
 
+def add_indexes(session, engine, metadata):
+    # Protein indexes for quick search
+    idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.protein_id_1)
+    # check if the index already exists
+    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_1')")).scalar():
+        idx_uniprot_id_1.create(engine)
+
+    idx_uniprot_id_2 = Index('idx_uniprot_id_2', EffectsProteinProtein.protein_id_2)
+    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_2')")).scalar():
+        idx_uniprot_id_2.create(engine)
+
+    idx_effects_protein_pheno = Index('idx_effects_protein_pheno', EffectsProteinPhenotype.protein_id)
+    if not session.execute(text("SELECT to_regclass('idx_effects_protein_pheno')")).scalar():
+        idx_effects_protein_pheno.create(engine)
+
+    idx_effects_protein_metabo = Index('idx_effects_protein_metabo', EffectsProteinMetabolite.protein_id)
+    if not session.execute(text("SELECT to_regclass('idx_effects_protein_metabo')")).scalar():
+        idx_effects_protein_metabo.create(engine)
+
+    # Index for quick typeahead search
+    view_description_fts = Table('view_description_fts', metadata, autoload_with=engine)
+    idx_display_name_fts = Index('idx_display_name_fts', view_description_fts.c.display_name)
+    if not session.execute(text("SELECT to_regclass('idx_display_name_fts')")).scalar():
+        idx_display_name_fts.create(engine)
+
+    # add index for view_associations_edges
+    view_associations_edges = Table('view_associations_edges', metadata, autoload_with=engine)
+    idx_assoc_source_id = Index('idx_source_id', view_associations_edges.c.source_id)
+    if not session.execute(text("SELECT to_regclass('idx_source_id')")).scalar():
+        idx_assoc_source_id.create(engine)
+
+    idx_assoc_target_id = Index('idx_target_id', view_associations_edges.c.target_id)
+    if not session.execute(text("SELECT to_regclass('idx_target_id')")).scalar():
+        idx_assoc_target_id.create(engine)
+
+    # add the last index that doesn't work well with sqlalchemy
+    if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
+        print("Index idx_description_fts already exists.")
+        return
+    session.execute(text("CREATE INDEX idx_description_fts "
+                         "ON view_description_fts USING gin(to_tsvector('english', description));"))
+    print("Created indexes")
+    session.commit()
+
+
+def add_views(session):
+    # check if the view already exists and if so, update it
+    view_exists = session.execute(text("SELECT to_regclass('view_description_fts')")).scalar()
+    if view_exists is not None:
+        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
+        session.commit()
+        print("View view_description_fts already exists. Refreshed.")
+    else:
+        # sql alchemy doesn't support creating views, so we have to use raw sql
+        view_sql = """
+        CREATE MATERIALIZED VIEW view_description_fts AS
+        SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_protein
+        UNION ALL
+        SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_metabolite
+        UNION ALL
+        SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_phenotype;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_description_fts.")
+
+    # create new view called view_references_edges
+    view_exists = session.execute(text("SELECT to_regclass('view_references_edges')")).scalar()
+    if view_exists is None:
+        view_sql = """
+        CREATE VIEW view_references_edges AS
+        SELECT 'protein' AS source_table, cohort_id, uniprot_id as reference_id FROM cohort_references_protein
+        UNION ALL
+        SELECT 'metabolite' AS source_table, cohort_id, hmdb_id as reference_id FROM cohort_references_metabolite
+        UNION ALL
+        SELECT 'phenotype' AS source_table, cohort_id, hpo_id as reference_id FROM cohort_references_phenotype
+        UNION ALL
+        SELECT 'disease' AS source_table, cohort_id, mondo_id as reference_id FROM cohort_references_disease;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_references_edges.")
+
+    # create new view called view_associations_edges
+    view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
+    if view_exists is None:
+        view_sql = """
+        CREATE MATERIALIZED VIEW view_associations_edges AS
+        SELECT uniprot_id_1 AS source_id, uniprot_id_2 AS target_id FROM protein_associates_protein
+        UNION ALL
+        SELECT uniprot_id AS source_id, hmdb_id AS target_id FROM protein_associates_metabolite
+        UNION ALL
+        SELECT mondo_id AS source_id, hpo_id AS target_id FROM disorder_associates_phenotype
+        UNION ALL
+        SELECT entrez_id AS source_id, mondo_id AS target_id FROM gene_associates_disorder
+        UNION ALL
+        SELECT hmdb_id AS source_id, mondo_id AS target_id FROM metabolite_associates_disorder
+        UNION ALL
+        SELECT genomic_variant AS source_id, entrez_id AS target_id FROM variant_affects_gene;
+        """
+        session.execute(text(view_sql))
+        print("Created view view_associations_edges.")
+    else:
+        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
+        print("View view_associations_edges already exists. Refreshed.")
+    session.commit()
+
+
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
-    # Base.metadata.drop_all(engine)
-    # cohort study
-    observations = os.getenv("OBSERVATION_SOURCE")
     # Define a session
     Session = sessionmaker(bind=engine)
-    session = Session()
-    metadata = MetaData()
+    db_session = Session()
+    # delete_tables(db_session)
 
-    # Reflect the tables
-    metadata.reflect(bind=engine)
+    metadata = MetaData()
     create_tables()
 
-    pheno_data_path = os.getenv("PHENOTYPE_PATH")
-    protein_data_path = os.getenv("PROTEIN_PATH")
-    metabo_data_path = os.getenv("METABOLITE_PATH")
-    edges_path = os.getenv("CALCULATED_EDGES_PATH")
+    pheno_data_path = PHENO_PATH
+    protein_data_path = PROTEIN_PATH
+    metabo_data_path = METABOLITE_PATH
+    edges_path = EDGES_PATH
+    data_dir = DATA_DIR
+
+    if not all([pheno_data_path, protein_data_path, metabo_data_path, edges_path]):
+        raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
+
+    if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path, edges_path]]):
+        raise ValueError("Some of the provided paths do not exist.")
+
     # testingSetup(session)
-    #add_disorder_data(session, pheno_data_path, obs_source=observations)
-    #add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
 
-    add_protein_data(session, protein_data_path, obs_source=observations)
-    #add_metabolite_data(session, metabo_data_path, obs_source=observations)
+    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
 
-    #gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    #add_genomic_variants(session, gene_ids, observation_source='external')
-
-    # add the edges calculated from the available data
-    #add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    # add_genomic_variants(db_session, gene_ids, observation_source='external')
 
     # second pass for phenotypes
-    #add_phenotype_data(session, pheno_data_path, obs_source='external')
-    #countEntries(session, metadata)
+    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
+    # add cohort phenotype data as the mapping is incomplete
+    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
 
+    # add the edges calculated from the available data
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
+    # count the number of entries in the database
+    metadata.reflect(bind=engine)
+    countEntries(db_session, metadata)
+
+    # add remaining things (indexes, views)
+    add_views(db_session)
+    add_indexes(db_session, engine, metadata)
+    db_session.close()
+    print("Database setup complete.")

@@ -4,10 +4,11 @@ import pandas as pd
 import nedrex
 from nedrex.core import iter_nodes, iter_edges
 from nedrex.core import api_keys_active, get_api_key
+from settings import DEBUG
 
 
-#nedrex.config.set_url_base("https://api.nedrex.net/open/")
-nedrex.config.set_url_base(" https://apps.cosy.bio/licensed")
+# nedrex.config.set_url_base("https://api.nedrex.net/open/")
+nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
 if api_keys_active():
     api_key = get_api_key(accept_eula=True)
     nedrex.config.set_api_key(api_key)
@@ -48,6 +49,8 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
     :param mondo_id: mondo id to fetch data for
     :return: dictionary with entrez ids and sources
     """
+    # Deprecated API call
+    return None
     url = f'https://api.nedrex.net/static/harmonizome/{mondo_id}'
     response = requests.get(url)
     try:
@@ -98,17 +101,15 @@ def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_di
     else:
         raise ValueError(f"Direction {direction} not supported")
 
-    edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
-    """
-    edges =[]
-    count = 0
-    for edge in iter_edges(edge_type):
-        if count >= 5:
-            break
-        if edge[first_node] in node_ids or edge[second_node] in node_ids:
-            edges.append(edge)
-            count += 1
-    """
+    if DEBUG:
+        edges = []
+        for edge in iter_edges(edge_type):
+            if edge[first_node] in node_ids or edge[second_node] in node_ids:
+                edges.append(edge)
+            if len(edges) > 1000:
+                break
+    else:
+        edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
 
     G = nx.Graph()
     for association in edges:
