@@ -520,21 +520,21 @@ if __name__ == '__main__':
     metabo_data_path = os.getenv("METABOLITE_PATH")
     edges_path = os.getenv("CALCULATED_EDGES_PATH")
     # testingSetup(session)
-    add_disorder_data(session, pheno_data_path, obs_source=observations)
-    add_phenotype_data(session, pheno_data_path, obs_source=observations)
+    #add_disorder_data(session, pheno_data_path, obs_source=observations)
+    #add_phenotype_data(session, pheno_data_path, obs_source=observations)
 
     add_protein_data(session, protein_data_path, obs_source=observations)
-    add_metabolite_data(session, metabo_data_path, obs_source=observations)
+    #add_metabolite_data(session, metabo_data_path, obs_source=observations)
 
-    gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    add_genomic_variants(session, gene_ids, observation_source='external')
+    #gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
+    #add_genomic_variants(session, gene_ids, observation_source='external')
 
     # add the edges calculated from the available data
-    add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    #add_calculated_edges(session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # second pass for phenotypes
-    add_phenotype_data(session, pheno_data_path, obs_source='external')
-    countEntries(session, metadata)
+    #add_phenotype_data(session, pheno_data_path, obs_source='external')
+    #countEntries(session, metadata)
 
 
 
