@@ -94,6 +94,7 @@ class Genomic_variant(Base):
     referenceSequence = Column(String)  # 'TC',
     type = Column(String)  # 'GenomicVariant'
     variantType = Column(String)  #'Deletion'}
+    #observation_source = Column(String)
 
 
 ### Association tables ###

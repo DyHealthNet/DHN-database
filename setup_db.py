@@ -1,5 +1,7 @@
 import networkx as nx
 from settings import *
+from nedrex.core import iter_nodes, iter_edges, get_node_types
+
 from testcases import *
 from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
@@ -7,7 +9,7 @@ from sqlalchemy.orm import DeclarativeBase
 from calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, Table, MetaData
 from protein_mapping import read_proteinID_chris, get_protein_nodes
-
+from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
@@ -22,6 +24,8 @@ url = url_object = URL.create(
     port=DB_PORT,
     database=DB_NAME,
 )
+url = "postgresql://postgres:password@localhost:9852/postgres"
+
 engine = create_engine(url)
 
 
@@ -458,6 +462,26 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
 
+def add_genomic_variants_neddrex(session, obs_source):
+    rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
+    rsIDset = read_rsid_chris(rsidPath)
+
+    #print(get_collection_attributes("genomic_variant", True))
+    updated_ids_set = {id_.replace('rs', '') for id_ in rsIDset}
+   # print("#Ids from Dataset", len(updated_ids_set))
+    # updated_ids_set.add("397704705")
+    #columns_to_use = ['RS# (dbSNP)', 'VariationID']
+    #idMappingDf = pd.read_csv(summaryData, sep='\t', usecols=columns_to_use)
+    #print(idMappingDf.head(5))
+    #print(idMappingDf.dtypes)
+    #subset_df = idMappingDf[idMappingDf['RS# (dbSNP)'].astype(str).isin(updated_ids_set)].drop_duplicates()
+    #subset_df.to_csv(rsidPath, sep='\t', index=False)
+    #print("#Ids that got matched", len(subset_df))
+    #print(subset_df.head(10))
+    rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
+    variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
+    add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
+    session.commit()
 
 def add_genomic_variants(session, entrez_ids: set[str] = None, observation_source: str = None):
     variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
@@ -655,32 +679,43 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     db_session = Session()
     # delete_tables(db_session)
+    dotenv.load_dotenv()
 
     metadata = MetaData()
     create_tables()
+    DATA_DIR = '../data'
 
-    pheno_data_path = PHENO_PATH
-    protein_data_path = PROTEIN_PATH
-    metabo_data_path = METABOLITE_PATH
-    edges_path = EDGES_PATH
+    PHENOTYPE_META_PATH = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
+    PROTEIN_META_PATH = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
+    METABOLITE_META_PATH = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    CALCULATED_EDGES_PATH = '../data/scores.csv'
+
+
+
+    protein_data_path = PROTEIN_META_PATH
+
+    pheno_data_path = PHENOTYPE_META_PATH
+    metabo_data_path = METABOLITE_META_PATH
+    edges_path = CALCULATED_EDGES_PATH
     data_dir = DATA_DIR
-
+    """
     if not all([pheno_data_path, protein_data_path, metabo_data_path, edges_path]):
-        raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
+            raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
 
     if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path, edges_path]]):
         raise ValueError("Some of the provided paths do not exist.")
-
+    """
     # testingSetup(session)
-    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    #add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_genomic_variants_neddrex(db_session, obs_source="test")
+    #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
 
-    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    #add_genomic_variants(db_session, gene_ids, observation_source='external')
 
-    # gene_ids = {str(row[0]) for row in session.query(Gene.entrez_id).all()}
-    # add_genomic_variants(db_session, gene_ids, observation_source='external')
-
+    """
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
@@ -691,13 +726,13 @@ if __name__ == '__main__':
 
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-
+    """
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
     add_views(db_session)
-    add_indexes(db_session, engine, metadata)
+#    add_indexes(db_session, engine, metadata)
     db_session.close()
     print("Database setup complete.")

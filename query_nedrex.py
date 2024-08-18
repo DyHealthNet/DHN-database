@@ -5,6 +5,7 @@ import nedrex
 from nedrex.core import iter_nodes, iter_edges
 from nedrex.core import api_keys_active, get_api_key
 from settings import DEBUG
+from nedrex.core import iter_nodes, iter_edges, get_node_types, get_collection_attributes
 
 
 # nedrex.config.set_url_base("https://api.nedrex.net/open/")
@@ -132,12 +133,26 @@ def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     return snomeds
 
 def get_variants_neddrex(variants_path: str):
-    df = pd.read_csv(variants_path, sep='\t')
+    df = read_rsID_chris(variants_path)
 
+
+def read_rsID_chris(variantDataPath: str):
+    """
+    reads Protein IDs from Chris dataset
+    """
+    df = pd.read_csv(variantDataPath, sep='\t')
+    # check how many nans in the uniprot ocl
+    print("Number of nans in variant col:", df['rsid'].isna().sum())
+    df['rsid'] = df['rsid'].fillna('')
+    uniprot_ids = df['rsid'].unique().tolist()
+    #uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
+    return uniprot_ids
 
 
 
 if __name__ == '__main__':
+    print(get_collection_attributes("genomic_variant"))
+    """
     needed_snomeds = get_needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
     data = get_disorder_data(needed_snomeds)
     snomed_to_mondo = domain_id_to_mondo(data)
@@ -159,3 +174,4 @@ if __name__ == '__main__':
             found += 1
         continue
     print(f"Found and successfully matched {found} snomed ids with diseases")
+"""
