@@ -5,7 +5,7 @@ import nedrex
 from nedrex.core import iter_nodes, iter_edges
 from nedrex.core import api_keys_active, get_api_key
 from settings import DEBUG
-from nedrex.core import iter_nodes, iter_edges, get_node_types, get_collection_attributes
+from nedrex.core import iter_nodes, iter_edges, get_node_types, get_collection_attributes, get_edge_types
 
 
 # nedrex.config.set_url_base("https://api.nedrex.net/open/")
@@ -107,7 +107,7 @@ def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_di
         for edge in iter_edges(edge_type):
             if edge[first_node] in node_ids or edge[second_node] in node_ids:
                 edges.append(edge)
-            if len(edges) > 1000:
+            if len(edges) > 100:
                 break
     else:
         edges = [e for e in iter_edges(edge_type) if e[first_node] in node_ids or e[second_node] in node_ids]
@@ -151,7 +151,28 @@ def read_rsID_chris(variantDataPath: str):
 
 
 if __name__ == '__main__':
-    print(get_collection_attributes("genomic_variant"))
+    #print(get_collection_attributes("variant_affects_gene")) #['sourceDomainId', 'targetDomainId', 'created', 'dataSources', 'type', 'updated']
+    #get_collection_attributes
+    #
+    #print(get_node_types()) ['disorder', 'drug', 'gene', 'genomic_variant', 'go', 'pathway', 'phenotype', 'protein', 'side_effect', 'signature', 'tissue']
+    print(get_collection_attributes('gene')) # ['primaryDomainId', 'approvedSymbol', 'chromosome', 'created', 'dataSources', 'description', 'displayName', 'domainIds', 'geneType', 'mapLocation', 'symbols', 'synonyms', 'type', 'updated']
+    print(get_collection_attributes('genomic_variant')) # ['primaryDomainId', 'alternativeSequence', 'chromosome', 'created', 'dataSources', 'domainIds', 'position', 'referenceSequence', 'type', 'updated', 'variantType']
+
+
+
+
+
+    """
+    __tablename__ = 'gene'
+    entrez_id = Column(String, primary_key=True)
+    display_name = Column(String)
+    description = Column(String)
+    synonyms = Column(ARRAY(String))
+    chromosome = Column(String)
+    observation_source = Column(String)
+    """
+    #variant_affects_gene
+
     """
     needed_snomeds = get_needed_snomed_ids('../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
     data = get_disorder_data(needed_snomeds)

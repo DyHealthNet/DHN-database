@@ -56,7 +56,7 @@ def get_genomic_variant_nodes(clinvarIds , observation_source):
             foundGenomicVariants.append(genomic_variant)
             found_proteins += 1
         if DEBUG:
-            if found_proteins > 10:
+            if found_proteins > 100:
                 break
 
     return foundGenomicVariants
@@ -64,7 +64,7 @@ def get_genomic_variant_nodes(clinvarIds , observation_source):
 xml_file_path = '/home/leo/Documents/Uni/Masterpraktikum/data/ClinVarVCVRelease_00-latest.xml.gz'
 summaryData = '/home/leo/Documents/Uni/Masterpraktikum/variant_summary.txt'
 
-
+"""
 rsIDset = read_rsid_chris(rsidPath)
 print(get_collection_attributes("genomic_variant",True))
 updated_ids_set = {id_.replace('rs', '') for id_ in rsIDset}
@@ -84,6 +84,47 @@ clinvarIds = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
 #get_genomic_variant_nodes(clinvarIds)
 
 print(len(clinvarIds))
+
+
+"""
+def read_variant_files(gwas_stats_path: str,variants_meta_path: str):
+    """
+    reads Protein IDs from Chris dataset
+    """
+   # print(head(gwas_stats_df))
+    gwas_stats_df = pd.read_csv(variants_meta_path, sep='\t', dtype= str)
+    print("GWAS: ", gwas_stats_df.shape)
+    variants_meta_df = pd.read_csv(gwas_stats_path, sep='\t', dtype =str)
+    print("VARIANTS: ", variants_meta_df.shape)
+    if 'Unnamed: 0' in variants_meta_df.columns:
+        variants_meta_df = variants_meta_df.drop(columns=['Unnamed: 0'])
+    if 'Unnamed: 0' in gwas_stats_df.columns:
+        gwas_stats_df = gwas_stats_df.drop(columns=['Unnamed: 0'])
+
+    merged_df = pd.merge(variants_meta_df, gwas_stats_df, left_on=['chr', 'pos', 'ref', 'alt'],
+                         right_on=['chrom', 'pos', 'ref', 'alt'])
+    print("MERGED: ", merged_df.shape)
+    """
+    df = pd.read_csv(variantDataPath, sep='\t')
+    # check how many nans in the uniprot ocl
+    print("Number of nans in variant col:", df['rsid'].isna().sum())
+    df['rsid'] = df['rsid'].fillna('')
+    rsids = df['rsid'].unique().tolist()
+    #uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
+    return rsids
+    """
+
+# gwas_stats file contains following columns: | chr,	pos,	ref,	alt,	neglog10_pval_meta,	beta_meta,	label,	type
+gwas_stats_path = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/medium/gwas_stats.csv'
+# variants_meta file contains following columns| chrom, pos, ref, alt, rsid
+variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
+
+#read_variant_files(gwas_stats_path, variants_meta_path)
+
+
+
+
+
 
 
 

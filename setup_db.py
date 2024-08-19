@@ -465,25 +465,67 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
 def add_genomic_variants_neddrex(session, obs_source):
     rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
     rsIDset = read_rsid_chris(rsidPath)
-
-    #print(get_collection_attributes("genomic_variant", True))
-    updated_ids_set = {id_.replace('rs', '') for id_ in rsIDset}
-   # print("#Ids from Dataset", len(updated_ids_set))
-    # updated_ids_set.add("397704705")
-    #columns_to_use = ['RS# (dbSNP)', 'VariationID']
-    #idMappingDf = pd.read_csv(summaryData, sep='\t', usecols=columns_to_use)
-    #print(idMappingDf.head(5))
-    #print(idMappingDf.dtypes)
-    #subset_df = idMappingDf[idMappingDf['RS# (dbSNP)'].astype(str).isin(updated_ids_set)].drop_duplicates()
-    #subset_df.to_csv(rsidPath, sep='\t', index=False)
-    #print("#Ids that got matched", len(subset_df))
-    #print(subset_df.head(10))
     rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     session.commit()
 
-def add_genomic_variants(session, entrez_ids: set[str] = None, observation_source: str = None):
+def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source):
+    variant_affects_gene_graph = get_edge_associations(node_ids=clinvarIds, edge_type='variant_affects_gene',
+                                                       direction='directed')
+    variant_affects_gene_dict = {}
+    id_list_total = [] # to check if is in database
+    variant_edge_list = []
+    variant_affects_gene_to_add = set()
+    for edge in variant_affects_gene_graph.edges(data=True):
+        variant_affects_gene_dict[edge[0]] = edge[1]
+        variant_edge_list.append(edge)
+        sourceDomainId = edge[0]
+        targedDomainId = edge[1]
+        id_list_total.append(sourceDomainId)
+        id_list_total.append(targedDomainId)#because graph is directed either first or second entry contains the entrez id
+
+        if sourceDomainId.startswith("entrez."):
+            entrez_id = sourceDomainId
+            variant = targedDomainId
+        if targedDomainId.startswith("entrez."):
+            entrez_id = targedDomainId
+            variant = sourceDomainId
+        variant_affects_gene_edge = Variant_affects_gene(genomic_variant=variant,
+                                                         entrez_id=entrez_id)
+        variant_affects_gene_to_add.add(variant_affects_gene_edge)
+    entrez_ids = {id for id in id_list_total if id.startswith("entrez.")}
+    genomic_variant_node_generator = iter_nodes('genomic_variant')
+    genomic_variant_node_generator = iter_nodes('gene')
+    genes_to_add = set()
+    for node in genomic_variant_node_generator:
+        if(node['primaryDomainId'] in id_list_total):
+            new_gene = Gene(entrez_id=node['primaryDomainId'],
+                                    display_name=node['displayName'],
+                                    description=node['description'],
+                                    synonyms=node['synonyms'],
+                                    chromosome=node['chromosome'],
+                                    observation_source='external')
+            genes_to_add.add(new_gene)
+    add_items(session, genes_to_add, Gene, ['entrez_id'])
+    session.commit()
+
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene,
+        filter_args=['entrez_id', 'genomic_variant'])
+    session.commit()
+
+
+
+
+    #stmt = select([genomic_variants.c.id]).where(genomic_variants.c.id == id_to_check)
+    #result = db_session.execute(stmt).first()
+    test= 2
+    return None
+
+
+
+
+def add_genomic_variants_linking_from_gene(session, entrez_ids: set[str] = None, observation_source: str = None):
     variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
                                                        direction='directed')  # Graph with 1511628 nodes and 1539719 edges
     print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
@@ -678,7 +720,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    # delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
 
     metadata = MetaData()
@@ -689,6 +731,7 @@ if __name__ == '__main__':
     PROTEIN_META_PATH = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
     METABOLITE_META_PATH = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     CALCULATED_EDGES_PATH = '../data/scores.csv'
+    VARIANT_PATH='../data/dyHealthNet/'
 
 
 
@@ -710,6 +753,9 @@ if __name__ == '__main__':
     #add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     #add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_genomic_variants_neddrex(db_session, obs_source="test")
+    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
+    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
+    print(len(genomic_variant_ids))
     #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
 
