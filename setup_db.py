@@ -41,6 +41,7 @@ def delete_tables(session):
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
     session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
+    session.execute(text("DROP VIEW IF EXISTS external_node_ids;"))
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
     session.commit()
     Base.metadata.drop_all(engine, checkfirst=True)
@@ -688,25 +689,25 @@ if __name__ == '__main__':
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
-    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    # add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    #
-    # add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
-    #
-    # # second pass for phenotypes
-    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
-    #
-    # # add cohort phenotype data as the mapping is incomplete
-    #
-    # add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    # add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
-    # add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+
+    add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+
+    # second pass for phenotypes
+    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+
+    # add cohort phenotype data as the mapping is incomplete
+
+    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
-    #
-    # # add the edges calculated from the available data
-    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+
+    # add the edges calculated from the available data
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)
