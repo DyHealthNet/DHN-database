@@ -2,11 +2,6 @@ SELECT COUNT(gene.display_name)
 FROM gene;
 
 
--- rename genome variant column to clinvar_id
-ALTER TABLE genomic_variant
-RENAME COLUMN "variant_primaryDomainId" TO clinvar_id;
-
-
 -- typeahead search using the cohort information
 CREATE MATERIALIZED VIEW view_cohort_fts AS
 SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, display_name FROM cohort_protein

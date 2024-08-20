@@ -26,9 +26,11 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
     phenotype_references_to_add = []
     missing = set()
     for index, row in raw_phenotypes.iterrows():
-
-        new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=row['snomed_term'],
-                                        description=row['description'], xrefs=row['snomed_id'])
+        display_name = row['snomed_term'] if row['snomed_term'] and isinstance(row['snomed_term'], str) \
+            else row['label']
+        new_phenotype = CohortPhenotype(cohort_id=row['label'], display_name=display_name,
+                                        description=row['description'],
+                                        xrefs="|".join([f"snomedct.{x}" for x in row['snomed_id'].split(';')]))
         phenotypes_to_add.append(new_phenotype)
 
         mondo_id = hpo_id = None
@@ -71,7 +73,7 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
         new_metabolite = CohortMetabolite(cohort_id=row['analyte_name'],
                                           display_name=row['biochemical_name'],
                                           description=row['analyte_class'],
-                                          xrefs=row['hmdb_id'])
+                                          xrefs="|".join([f"hmdb.{x}" for x in row['hmdb_id'].split(';')]))
 
         metabolites_to_add.append(new_metabolite)
 
@@ -104,7 +106,7 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
         new_protein = CohortProtein(cohort_id=row['protein_id'],
                                     display_name=display_name,
                                     description=row['long_description'],
-                                    xrefs=row['UniProt'])
+                                    xrefs="|".join([f"uniprot.{x}" for x in row['UniProt'].split('|')]))
         proteins_to_add.append(new_protein)
 
         # add the references to the knowledge graph for the proteins

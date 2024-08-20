@@ -9,12 +9,14 @@ from sqlalchemy.orm import DeclarativeBase
 from calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, Table, MetaData
 from protein_mapping import read_proteinID_chris, get_protein_nodes
-from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, read_variant_gwas_file
+from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, \
+    read_variant_gwas_file
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
+from database_views import add_views, add_indexes
 
 url = url_object = URL.create(
     "postgresql",
@@ -24,9 +26,9 @@ url = url_object = URL.create(
     port=DB_PORT,
     database=DB_NAME,
 )
-url = "postgresql://postgres:password@localhost:9852/postgres"
 
 engine = create_engine(url)
+print("Connected to the database")
 
 
 def create_tables():
@@ -462,24 +464,29 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
 
-def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_path,obs_source):
-    variants_meta_path = genomic_variant_meta_path#'/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
-    gwas_stats_path = gwas_stats_path#'/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
+
+def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_path, obs_source):
+    variants_meta_path = genomic_variant_meta_path
+    gwas_stats_path = gwas_stats_path
     cohort_variants = read_variant_meta_file(variants_meta_path)
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
     session.commit()
-    effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(gwas_stats_path)
+    effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
+        gwas_stats_path)
 
     rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
     phenotype_ids = {str(row[0]) for row in db_session.query(CohortPhenotype.cohort_id).all()}
     protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
     metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
-    effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
-    effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
-    effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+    effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if
+                                        obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+    effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if
+                                           obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+    effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if
+                                          obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
     add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['id'])
-    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype,['id'])
-    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein,['id'])
+    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['id'])
+    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['id'])
     session.commit()
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
@@ -493,7 +500,7 @@ def get_cohort_references_variant(session, obs_source):
     # If you want to do something with these objects, you can loop through them
     newCohortReferencesSet = set()
     existing_rsids_ids = {str(row[0]) for row in session.query(CohortGenomicVariant.cohort_id).all()}
-    existing_clin_var_ids = {str(row[0]) for row in session.query(Genomic_variant.variant_primaryDomainId).all()}
+    existing_clin_var_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
 
     for variant in genomic_variants:
         variant_domain_ids = variant.domainIds.replace(",", "").replace("[", "").replace("]", "").replace("'",
@@ -509,27 +516,24 @@ def get_cohort_references_variant(session, obs_source):
     return (newCohortReferencesSet)
 
 
-
-def add_genomic_variants_neddrex(session, genomic_variant_meta_path,obs_source):
-    #rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
-    #rsIDset = read_rsid_chris(rsidPath)
+def add_genomic_variants_neddrex(session, genomic_variant_meta_path, obs_source):
+    # rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
+    # rsIDset = read_rsid_chris(rsidPath)
     rsIDset = read_rsid_chris(genomic_variant_meta_path)
     rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
-    add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
+    add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
-    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
+    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
     add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source="test")
     session.commit()
 
 
-
-
-def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source):
+def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds, obs_source):
     variant_affects_gene_graph = get_edge_associations(node_ids=clinvarIds, edge_type='variant_affects_gene',
                                                        direction='directed')
     variant_affects_gene_dict = {}
-    id_list_total = [] # to check if is in database
+    id_list_total = []  # to check if is in database
     variant_edge_list = []
     variant_affects_gene_to_add = set()
     for edge in variant_affects_gene_graph.edges(data=True):
@@ -538,7 +542,8 @@ def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source
         sourceDomainId = edge[0]
         targedDomainId = edge[1]
         id_list_total.append(sourceDomainId)
-        id_list_total.append(targedDomainId)#because graph is directed either first or second entry contains the entrez id
+        id_list_total.append(
+            targedDomainId)  # because graph is directed either first or second entry contains the entrez id
 
         if sourceDomainId.startswith("entrez."):
             entrez_id = sourceDomainId
@@ -546,7 +551,7 @@ def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source
         if targedDomainId.startswith("entrez."):
             entrez_id = targedDomainId
             variant = sourceDomainId
-        variant_affects_gene_edge = Variant_affects_gene(genomic_variant=variant,
+        variant_affects_gene_edge = Variant_affects_gene(clinvar_id=variant,
                                                          entrez_id=entrez_id)
         variant_affects_gene_to_add.add(variant_affects_gene_edge)
     entrez_ids = {id for id in id_list_total if id.startswith("entrez.")}
@@ -554,30 +559,25 @@ def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source
     genomic_variant_node_generator = iter_nodes('gene')
     genes_to_add = set()
     for node in genomic_variant_node_generator:
-        if(node['primaryDomainId'] in id_list_total):
+        if (node['primaryDomainId'] in id_list_total):
             new_gene = Gene(entrez_id=node['primaryDomainId'],
-                                    display_name=node['displayName'],
-                                    description=node['description'],
-                                    synonyms=node['synonyms'],
-                                    chromosome=node['chromosome'],
-                                    observation_source='external')
+                            display_name=node['displayName'],
+                            description=node['description'],
+                            synonyms=node['synonyms'],
+                            chromosome=node['chromosome'],
+                            observation_source='external')
             genes_to_add.add(new_gene)
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     session.commit()
 
     add_items(session, variant_affects_gene_to_add, Variant_affects_gene,
-        filter_args=['entrez_id', 'genomic_variant'])
+              filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
 
-
-
-
-    #stmt = select([genomic_variants.c.id]).where(genomic_variants.c.id == id_to_check)
-    #result = db_session.execute(stmt).first()
-    test= 2
+    # stmt = select([genomic_variants.c.id]).where(genomic_variants.c.id == id_to_check)
+    # result = db_session.execute(stmt).first()
+    test = 2
     return None
-
-
 
 
 def add_genomic_variants_linking_from_gene(session, entrez_ids: set[str] = None, observation_source: str = None):
@@ -595,26 +595,26 @@ def add_genomic_variants_linking_from_gene(session, entrez_ids: set[str] = None,
     genomic_variant_node_generator = iter_nodes('genomic_variant')
     for node in genomic_variant_node_generator:
         if node['primaryDomainId'] in clinvar_ids:
-            newVariant = Genomic_variant(variant_primaryDomainId=node['primaryDomainId'],  #linvar.17735
-                                         alternativeSequence=node['alternativeSequence'],  #'T',
+            newVariant = Genomic_variant(clinvar_id=node['primaryDomainId'],  # linvar.17735
+                                         alternativeSequence=node['alternativeSequence'],  # 'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',
                                          created=node['created'],  # '2024-06-17T12:36:21.275000'
-                                         dataSources=node['dataSources'],  #['clinvar'],
-                                         domainIds=node['domainIds'],  #['clinvar.17735', 'dbsnp.1556058284']
-                                         position=node['position'],  #83614,
+                                         dataSources=node['dataSources'],  # ['clinvar'],
+                                         domainIds=node['domainIds'],  # ['clinvar.17735', 'dbsnp.1556058284']
+                                         position=node['position'],  # 83614,
                                          referenceSequence=node['referenceSequence'],  # 'TC',
                                          type=node['type'],  # 'GenomicVariant'
-                                         variantType=node['variantType'])  #'Deletion'})
+                                         variantType=node['variantType'])  # 'Deletion'})
             variants_to_add.append(newVariant)
 
-    add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
+    add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     variant_affects_gene_to_add = []
     genes = []
-    available_variants = {variant.variant_primaryDomainId for variant in variants_to_add}
+    available_variants = {variant.clinvar_id for variant in variants_to_add}
     for variant, gene in variant_affects_gene_dict.items():
         if (variant in available_variants and gene in entrez_ids):
-            variant_affects_gene_to_add.append(Variant_affects_gene(genomic_variant=variant, entrez_id=gene))
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'genomic_variant'])
+            variant_affects_gene_to_add.append(Variant_affects_gene(clinvar_id=variant, entrez_id=gene))
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
 
 
@@ -661,180 +661,59 @@ def testingSetup(session):
     test = 2
 
 
-def add_indexes(session, engine, metadata):
-    # Protein indexes for quick search
-    idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.protein_id_1)
-    # check if the index already exists
-    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_1')")).scalar():
-        idx_uniprot_id_1.create(engine)
-
-    idx_uniprot_id_2 = Index('idx_uniprot_id_2', EffectsProteinProtein.protein_id_2)
-    if not session.execute(text("SELECT to_regclass('idx_uniprot_id_2')")).scalar():
-        idx_uniprot_id_2.create(engine)
-
-    idx_effects_protein_pheno = Index('idx_effects_protein_pheno', EffectsProteinPhenotype.protein_id)
-    if not session.execute(text("SELECT to_regclass('idx_effects_protein_pheno')")).scalar():
-        idx_effects_protein_pheno.create(engine)
-
-    idx_effects_protein_metabo = Index('idx_effects_protein_metabo', EffectsProteinMetabolite.protein_id)
-    if not session.execute(text("SELECT to_regclass('idx_effects_protein_metabo')")).scalar():
-        idx_effects_protein_metabo.create(engine)
-
-    # Index for quick typeahead search
-    view_description_fts = Table('view_description_fts', metadata, autoload_with=engine)
-    idx_display_name_fts = Index('idx_display_name_fts', view_description_fts.c.display_name)
-    if not session.execute(text("SELECT to_regclass('idx_display_name_fts')")).scalar():
-        idx_display_name_fts.create(engine)
-
-    # add index for view_associations_edges
-    view_associations_edges = Table('view_associations_edges', metadata, autoload_with=engine)
-    idx_assoc_source_id = Index('idx_source_id', view_associations_edges.c.source_id)
-    if not session.execute(text("SELECT to_regclass('idx_source_id')")).scalar():
-        idx_assoc_source_id.create(engine)
-
-    idx_assoc_target_id = Index('idx_target_id', view_associations_edges.c.target_id)
-    if not session.execute(text("SELECT to_regclass('idx_target_id')")).scalar():
-        idx_assoc_target_id.create(engine)
-
-    # add the last index that doesn't work well with sqlalchemy
-    if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
-        print("Index idx_description_fts already exists.")
-        return
-    session.execute(text("CREATE INDEX idx_description_fts "
-                         "ON view_description_fts USING gin(to_tsvector('english', description));"))
-    print("Created indexes")
-    session.commit()
-
-
-def add_views(session):
-    # check if the view already exists and if so, update it
-    view_exists = session.execute(text("SELECT to_regclass('view_description_fts')")).scalar()
-    if view_exists is not None:
-        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
-        session.commit()
-        print("View view_description_fts already exists. Refreshed.")
-    else:
-        # sql alchemy doesn't support creating views, so we have to use raw sql
-        view_sql = """
-        CREATE MATERIALIZED VIEW view_description_fts AS
-        SELECT 'cohort_protein' AS source_table, cohort_id AS id, description, 
-                display_name, xrefs FROM cohort_protein
-        UNION ALL
-        SELECT 'cohort_metabolite' AS source_table, cohort_id AS id, description, 
-                display_name, xrefs FROM cohort_metabolite
-        UNION ALL
-        SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, 
-                display_name, xrefs FROM cohort_phenotype;
-        """
-        session.execute(text(view_sql))
-        print("Created view view_description_fts.")
-
-    # create new view called view_references_edges
-    view_exists = session.execute(text("SELECT to_regclass('view_references_edges')")).scalar()
-    if view_exists is None:
-        view_sql = """
-        CREATE VIEW view_references_edges AS
-        SELECT 'protein' AS source_table, cohort_id, uniprot_id as reference_id FROM cohort_references_protein
-        UNION ALL
-        SELECT 'metabolite' AS source_table, cohort_id, hmdb_id as reference_id FROM cohort_references_metabolite
-        UNION ALL
-        SELECT 'phenotype' AS source_table, cohort_id, hpo_id as reference_id FROM cohort_references_phenotype
-        UNION ALL
-        SELECT 'disease' AS source_table, cohort_id, mondo_id as reference_id FROM cohort_references_disease;
-        """
-        session.execute(text(view_sql))
-        print("Created view view_references_edges.")
-
-    # create new view called view_associations_edges
-    view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
-    if view_exists is None:
-        view_sql = """
-        CREATE MATERIALIZED VIEW view_associations_edges AS
-        SELECT uniprot_id_1 AS source_id, uniprot_id_2 AS target_id FROM protein_associates_protein
-        UNION ALL
-        SELECT uniprot_id AS source_id, hmdb_id AS target_id FROM protein_associates_metabolite
-        UNION ALL
-        SELECT mondo_id AS source_id, hpo_id AS target_id FROM disorder_associates_phenotype
-        UNION ALL
-        SELECT entrez_id AS source_id, mondo_id AS target_id FROM gene_associates_disorder
-        UNION ALL
-        SELECT hmdb_id AS source_id, mondo_id AS target_id FROM metabolite_associates_disorder
-        UNION ALL
-        SELECT genomic_variant AS source_id, entrez_id AS target_id FROM variant_affects_gene;
-        """
-        session.execute(text(view_sql))
-        print("Created view view_associations_edges.")
-    else:
-        session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
-        print("View view_associations_edges already exists. Refreshed.")
-    session.commit()
-
-
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    delete_tables(db_session)
+    # delete_tables(db_session)
     dotenv.load_dotenv()
 
     metadata = MetaData()
     create_tables()
-    DATA_DIR = '../data'
-    PHENOTYPE_META_PATH = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    PROTEIN_META_PATH = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    METABOLITE_META_PATH = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    CALCULATED_EDGES_PATH = '../data/scores.csv'
-    VARIANT_PATH='../data/dyHealthNet/'
-    GENOMIC_VARIANT_META_PATH = '../data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
-    GWAS_STATS_PATH = '../data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
 
-    protein_data_path = PROTEIN_META_PATH
-    pheno_data_path = PHENOTYPE_META_PATH
-    metabo_data_path = METABOLITE_META_PATH
-    edges_path = CALCULATED_EDGES_PATH
+    protein_data_path = PROTEIN_PATH
+    pheno_data_path = PHENO_PATH
+    metabo_data_path = METABOLITE_PATH
+    edges_path = EDGES_PATH
     genomic_variant_meta_path = GENOMIC_VARIANT_META_PATH
     gwas_stats_path = GWAS_STATS_PATH
     data_dir = DATA_DIR
 
+    if not all([pheno_data_path, protein_data_path, metabo_data_path,
+                genomic_variant_meta_path, gwas_stats_path, edges_path]):
+        raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
 
-    """
-    if not all([pheno_data_path, protein_data_path, metabo_data_path, edges_path]):
-            raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
-
-    if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path, edges_path]]):
+    if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
+                                            edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
-    """
-    # testingSetup(session)
 
-    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    # add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    #
+    # add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+    #
+    # # second pass for phenotypes
+    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+    #
+    # # add cohort phenotype data as the mapping is incomplete
+    #
+    # add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    # add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+    #
+    # # add the edges calculated from the available data
+    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    add_genomic_variants_neddrex(db_session, genomic_variant_meta_path,obs_source="test")
-
-    # second pass for phenotypes
-    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
-
-    # add cohort phenotype data as the mapping is incomplete
-
-    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
-    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    add_cohort_genomic_variants(db_session,genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
-
-
-    """"
-    # add the edges calculated from the available data
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-    """
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
     add_views(db_session)
-#    add_indexes(db_session, engine, metadata)
+    add_indexes(db_session, engine, metadata)
     db_session.close()
     print("Database setup complete.")

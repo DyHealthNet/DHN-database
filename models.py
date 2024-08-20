@@ -3,16 +3,19 @@ from sqlalchemy.orm import declarative_base
 
 # Create a declarative base
 Base = declarative_base()
+
+
 ### Tables of data from the cohort study ###
 class CohortGenomicVariant(Base):
-    __tablename__ = 'cohort_genomic_variant'
-    cohort_id = Column(String, primary_key= True)
+    __tablename__ = 'cohort_variant'
+    cohort_id = Column(String, primary_key=True)
     chrom = Column(String)
     pos = Column(String)
     ref = Column(String)
     alt = Column(String)
-    #TBD description = all info merged into String
-    #TBDdisplay Name = cohort_id
+    # TBD description = all info merged into String
+    # TBDdisplay Name = cohort_id
+
 
 class CohortPhenotype(Base):
     __tablename__ = 'cohort_phenotype'
@@ -68,7 +71,8 @@ class Phenotype(Base):
     synonyms = Column(String)
     observation_source = Column(String)
 
-#Read Data from file into Object Datastructure.
+
+# Read Data from file into Object Datastructure.
 
 class Protein(Base):
     __tablename__ = 'protein'
@@ -92,17 +96,17 @@ class Metabolite(Base):
 
 class Genomic_variant(Base):
     __tablename__ = "genomic_variant"
-    variant_primaryDomainId = Column(String, primary_key=True)  #clinvar.17735
-    alternativeSequence = Column(String)  #'T',
+    clinvar_id = Column(String, primary_key=True)  # clinvar.17735
+    alternativeSequence = Column(String)  # 'T',
     chromosome = Column(String)  # 'NW_009646201.1',
     created = Column(String)  # '2024-06-17T12:36:21.275000'
-    dataSources = Column(String)  #['clinvar'],
-    domainIds = Column(String)  #['clinvar.17735', 'dbsnp.1556058284']
-    position = Column(String)  #83614,
+    dataSources = Column(String)  # ['clinvar'],
+    domainIds = Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
+    position = Column(String)  # 83614,
     referenceSequence = Column(String)  # 'TC',
     type = Column(String)  # 'GenomicVariant'
-    variantType = Column(String)  #'Deletion'}
-    #observation_source = Column(String)
+    variantType = Column(String)  # 'Deletion'}
+    observation_source = Column(String)
 
 
 ### Association tables ###
@@ -136,35 +140,41 @@ class CohortReferencesMetabolite(Base):
     cohort_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     hmdb_id = Column(String, ForeignKey('metabolite.hmdb_id'))
 
+
 class CohortReferencesVariant(Base):
     __tablename__ = 'cohort_references_variant'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    cohort_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
-    variant_id = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
+    cohort_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
+    clinvar_id = Column(String, ForeignKey('genomic_variant.clinvar_id'))
+
+
 # Calculated effects of cohort observations
 class EffectVariantProtein(Base):
     __tablename__ = 'effects_variant_protein'
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
-    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     pvalue = Column(Float)
     effect_size = Column(Float)
+
 
 class EffectVariantMetabolite(Base):
     __tablename__ = 'effects_variant_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
-    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     pvalue = Column(Float)
     effect_size = Column(Float)
+
 
 class EffectVariantPhenotype(Base):
     __tablename__ = 'effects_variant_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
-    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     pvalue = Column(Float)
     effect_size = Column(Float)
+
 
 class EffectsProteinProtein(Base):
     __tablename__ = 'effects_protein_protein'
@@ -265,7 +275,7 @@ class ProteinAssocProtein(Base):
 class Variant_affects_gene(Base):
     __tablename__ = 'variant_affects_gene'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    genomic_variant = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
+    clinvar_id = Column(String, ForeignKey('genomic_variant.clinvar_id'))
     entrez_id = Column(String, ForeignKey('gene.entrez_id'))
 
 
