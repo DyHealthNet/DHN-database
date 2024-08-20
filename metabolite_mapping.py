@@ -94,7 +94,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
         found_ids.add(accession)
         root.clear()
 
-        if DEBUG and len(hmdb_info) > 100:
+        if DEBUG and len(hmdb_info) > 1000:
             break
 
     print(f"Ids that could not be found: {relevant_ids - found_ids}")

@@ -477,7 +477,7 @@ def add_cohort_genomic_variants(session, obs_source):
         effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
         effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
         test = 2
-        add_items(session, effectVariantMetaboliteSet_filtered, CohortGenomicVariant, ['id'])
+        add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['id'])
         add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype,['id'])
         add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein,['id'])
 
@@ -747,7 +747,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    delete_tables(db_session)
+   # delete_tables(db_session)
     dotenv.load_dotenv()
 
     metadata = MetaData()
@@ -775,30 +775,34 @@ if __name__ == '__main__':
         raise ValueError("Some of the provided paths do not exist.")
     """
     # testingSetup(session)
-    #add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    #add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    #add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    #add_genomic_variants_neddrex(db_session, obs_source="test")
-    #genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
-    #add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
+    '''
+    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_genomic_variants_neddrex(db_session, obs_source="test")
+    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
+    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS) # delete
 
-    add_cohort_genomic_variants(session=db_session, obs_source="test")
+    '''
 
     #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
 
     #add_genomic_variants(db_session, gene_ids, observation_source='external')
 
-    """
+
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
     # add cohort phenotype data as the mapping is incomplete
+
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_cohort_genomic_variants(session=db_session, obs_source="test")
 
+    """"
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
     """

@@ -103,7 +103,7 @@ def read_variant_gwas_file(gwas_stats_path: str):
 
     for index, row in variants_meta_df.iterrows():
         if (DEBUG):
-            if (len(effectVariantPhenotypeSet) > 100):
+            if (len(effectVariantPhenotypeSet) > 100 and len(effectVariantMetaboliteSet) > 100 and len(effectVariantProteinSet) > 100):
                 break
         type = row['type']
         if(type == "pheno"):
@@ -124,6 +124,14 @@ def read_variant_gwas_file(gwas_stats_path: str):
             )
 
             effectVariantProteinSet.add(newEffectVariantProtein)
+        if (type == "metab"):
+            newEffectVariantMetabolite = EffectVariantMetabolite(
+                metabolite_id = row['label'],
+                variant_id = row['variant'],
+                pvalue=float(row['pvalue']),
+                effect_size=float(row['eff_size'])
+            )
+            effectVariantMetaboliteSet.add(newEffectVariantMetabolite)
 
 
     return effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet
