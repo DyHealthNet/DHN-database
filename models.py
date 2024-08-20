@@ -6,6 +6,13 @@ Base = declarative_base()
 
 
 ### Tables of data from the cohort study ###
+class CohortGenomicVariant(Base):
+    __tablename__ = 'cohort_genomic_variant'
+    cohort_id = Column(String, primary_key= True)
+    chrom = Column(String)
+    pos = Column(String)
+    ref = Column(String)
+    alt = Column(String)
 
 class CohortPhenotype(Base):
     __tablename__ = 'cohort_phenotype'

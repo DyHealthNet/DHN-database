@@ -9,7 +9,7 @@ from sqlalchemy.orm import DeclarativeBase
 from calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, Table, MetaData
 from protein_mapping import read_proteinID_chris, get_protein_nodes
-from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris
+from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
@@ -462,6 +462,18 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
 
+def add_cohort_genomic_variants(session, obs_source):
+    variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
+    cohort_variants = read_variant_meta_file(variants_meta_path)
+    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
+    session.commit()
+
+
+
+
+
+
+
 def add_genomic_variants_neddrex(session, obs_source):
     rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
     rsIDset = read_rsid_chris(rsidPath)
@@ -736,7 +748,6 @@ if __name__ == '__main__':
 
 
     protein_data_path = PROTEIN_META_PATH
-
     pheno_data_path = PHENOTYPE_META_PATH
     metabo_data_path = METABOLITE_META_PATH
     edges_path = CALCULATED_EDGES_PATH
@@ -752,10 +763,10 @@ if __name__ == '__main__':
     #add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     #add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     #add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_genomic_variants_neddrex(db_session, obs_source="test")
-    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
-    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
-    print(len(genomic_variant_ids))
+    #add_genomic_variants_neddrex(db_session, obs_source="test")
+    #genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
+    #add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
+    add_cohort_genomic_variants(session=db_session, obs_source="test")
     #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
 

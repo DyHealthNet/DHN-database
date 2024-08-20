@@ -1,8 +1,10 @@
 import pandas as pd
 import nedrex
 from nedrex.core import api_keys_active, get_api_key
+from sqlalchemy.sql.type_api import Variant
+
 from settings import DEBUG
-from models import Genomic_variant
+from models import CohortGenomicVariant, Genomic_variant
 from nedrex.core import iter_nodes, iter_edges, get_node_types,get_collection_attributes
 nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
 if api_keys_active():
@@ -64,60 +66,34 @@ def get_genomic_variant_nodes(clinvarIds , observation_source):
 xml_file_path = '/home/leo/Documents/Uni/Masterpraktikum/data/ClinVarVCVRelease_00-latest.xml.gz'
 summaryData = '/home/leo/Documents/Uni/Masterpraktikum/variant_summary.txt'
 
-"""
-rsIDset = read_rsid_chris(rsidPath)
-print(get_collection_attributes("genomic_variant",True))
-updated_ids_set = {id_.replace('rs', '') for id_ in rsIDset}
-print("#Ids from Dataset" ,len(updated_ids_set))
-#updated_ids_set.add("397704705")
-columns_to_use = ['RS# (dbSNP)', 'VariationID']
-idMappingDf = pd.read_csv(summaryData, sep='\t', usecols=columns_to_use )
-print(idMappingDf.head(5))
-print(idMappingDf.dtypes)
-subset_df = idMappingDf[idMappingDf['RS# (dbSNP)'].astype(str).isin(updated_ids_set)].drop_duplicates()
-
-subset_df.to_csv('/home/leo/Documents/Uni/Masterpraktikum/data/output_file.tsv', sep='\t', index=False)
-print("#Ids that got matched", len(subset_df))
-print(subset_df.head(10))
-clinvarIds = subset_df["VariationID"].tolist()
-clinvarIds = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
-#get_genomic_variant_nodes(clinvarIds)
-
-print(len(clinvarIds))
-
-
-"""
-def read_variant_files(gwas_stats_path: str,variants_meta_path: str):
+def read_variant_meta_file(variants_meta_path: str):
     """
     reads Protein IDs from Chris dataset
     """
    # print(head(gwas_stats_df))
-    gwas_stats_df = pd.read_csv(variants_meta_path, sep='\t', dtype= str)
-    print("GWAS: ", gwas_stats_df.shape)
-    variants_meta_df = pd.read_csv(gwas_stats_path, sep='\t', dtype =str)
-    print("VARIANTS: ", variants_meta_df.shape)
-    if 'Unnamed: 0' in variants_meta_df.columns:
-        variants_meta_df = variants_meta_df.drop(columns=['Unnamed: 0'])
-    if 'Unnamed: 0' in gwas_stats_df.columns:
-        gwas_stats_df = gwas_stats_df.drop(columns=['Unnamed: 0'])
 
-    merged_df = pd.merge(variants_meta_df, gwas_stats_df, left_on=['chr', 'pos', 'ref', 'alt'],
-                         right_on=['chrom', 'pos', 'ref', 'alt'])
-    print("MERGED: ", merged_df.shape)
-    """
-    df = pd.read_csv(variantDataPath, sep='\t')
-    # check how many nans in the uniprot ocl
-    print("Number of nans in variant col:", df['rsid'].isna().sum())
-    df['rsid'] = df['rsid'].fillna('')
-    rsids = df['rsid'].unique().tolist()
-    #uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
-    return rsids
-    """
+    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype= str).drop(columns=['Unnamed: 0'])
+    variantSet = set()
+    for index, row in variants_meta_df.iterrows():
+        newVariant=CohortGenomicVariant(
+            cohort_id=row['rsid'],
+            chrom = row['chrom'],
+            pos = row['pos'],
+            ref = row['ref'],
+            alt = row['alt']
+
+        )
+        variantSet.add(newVariant)
+        if(DEBUG):
+            if(len(variantSet) > 100):
+                break
+    return variantSet
+
 
 # gwas_stats file contains following columns: | chr,	pos,	ref,	alt,	neglog10_pval_meta,	beta_meta,	label,	type
-gwas_stats_path = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/medium/gwas_stats.csv'
+gwas_stats_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
 # variants_meta file contains following columns| chrom, pos, ref, alt, rsid
-variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
+variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
 
 #read_variant_files(gwas_stats_path, variants_meta_path)
 
