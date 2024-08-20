@@ -38,6 +38,8 @@ def get_genomic_variant_nodes(clinvarIds , observation_source):
         primary_domain_id = node['domainIds']
         if len(primary_domain_id) > 1:
             primary_domain_id = node['domainIds'][1]
+            test = 2
+
         else:
             continue
         if(primary_domain_id in clinvarIds):
@@ -53,6 +55,7 @@ def get_genomic_variant_nodes(clinvarIds , observation_source):
                 referenceSequence=str(node.get('referenceSequence')),  # Column(String)  # 'TC',
                 type=str(node.get('type')),  # Column(String)  # 'GenomicVariant'
                 variantType=str(node.get('variantType'))  # Column(String)  # 'Deletion'}
+
                 #observation_source=observation_source
 
                 )

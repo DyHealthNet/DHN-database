@@ -11,6 +11,8 @@ class CohortGenomicVariant(Base):
     pos = Column(String)
     ref = Column(String)
     alt = Column(String)
+    #TBD description = all info merged into String
+    #TBDdisplay Name = cohort_id
 
 class CohortPhenotype(Base):
     __tablename__ = 'cohort_phenotype'
@@ -66,6 +68,7 @@ class Phenotype(Base):
     synonyms = Column(String)
     observation_source = Column(String)
 
+#Read Data from file into Object Datastructure.
 
 class Protein(Base):
     __tablename__ = 'protein'
@@ -133,7 +136,11 @@ class CohortReferencesMetabolite(Base):
     cohort_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     hmdb_id = Column(String, ForeignKey('metabolite.hmdb_id'))
 
-
+class CohortReferencesVariant(Base):
+    __tablename__ = 'cohort_references_variant'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    variant_id = Column(String, ForeignKey('genomic_variant.variant_primaryDomainId'))
 # Calculated effects of cohort observations
 class EffectVariantProtein(Base):
     __tablename__ = 'effects_variant_protein'
