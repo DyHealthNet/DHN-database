@@ -6,7 +6,8 @@ from sqlalchemy.sql.type_api import Variant
 from settings import DEBUG
 from models import CohortGenomicVariant, Genomic_variant, EffectVariantProtein, EffectVariantMetabolite, EffectVariantPhenotype
 from nedrex.core import iter_nodes, iter_edges, get_node_types,get_collection_attributes
-nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
+#nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
+nedrex.config.set_url_base("https://api.nedrex.net/licensed/")
 if api_keys_active():
     api_key = get_api_key(accept_eula=True)
     nedrex.config.set_api_key(api_key)

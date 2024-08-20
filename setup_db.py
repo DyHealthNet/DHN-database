@@ -474,18 +474,12 @@ def add_cohort_genomic_variants(session, obs_source):
         protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
         metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
         effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
-
         effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
         effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
-
-        metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
-
         test = 2
-
-
-    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
-    #add_items(session, effectVariantPhenotypeSet, EffectVariantPhenotype,['id'])
-    add_items(session, effectVariantProteinSet, EffectVariantProtein,['id'])
+        add_items(session, effectVariantMetaboliteSet_filtered, CohortGenomicVariant, ['id'])
+        add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype,['id'])
+        add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein,['id'])
 
     session.commit()
 
