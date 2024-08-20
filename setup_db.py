@@ -9,7 +9,7 @@ from sqlalchemy.orm import DeclarativeBase
 from calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, Table, MetaData
 from protein_mapping import read_proteinID_chris, get_protein_nodes
-from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file
+from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, read_variant_gwas_file
 from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
@@ -464,8 +464,29 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
 
 def add_cohort_genomic_variants(session, obs_source):
     variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
+    gwas_stats_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
     cohort_variants = read_variant_meta_file(variants_meta_path)
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
+    effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(gwas_stats_path)
+    if DEBUG:
+        rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
+        phenotype_ids = {str(row[0]) for row in db_session.query(CohortPhenotype.cohort_id).all()}
+        protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
+        metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
+        effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+
+        effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+        effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+
+        metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
+
+        test = 2
+
+
+    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
+    #add_items(session, effectVariantPhenotypeSet, EffectVariantPhenotype,['id'])
+    add_items(session, effectVariantProteinSet, EffectVariantProtein,['id'])
+
     session.commit()
 
 
@@ -766,7 +787,10 @@ if __name__ == '__main__':
     #add_genomic_variants_neddrex(db_session, obs_source="test")
     #genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
     #add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
+    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS) # delete
+
     add_cohort_genomic_variants(session=db_session, obs_source="test")
+
     #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
 

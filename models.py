@@ -3,8 +3,6 @@ from sqlalchemy.orm import declarative_base
 
 # Create a declarative base
 Base = declarative_base()
-
-
 ### Tables of data from the cohort study ###
 class CohortGenomicVariant(Base):
     __tablename__ = 'cohort_genomic_variant'
@@ -107,6 +105,7 @@ class Genomic_variant(Base):
 ### Association tables ###
 
 # Connections between cohort observations and external knowledge graph entities
+
 class CohortReferencesPhenotype(Base):
     __tablename__ = 'cohort_references_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -136,6 +135,29 @@ class CohortReferencesMetabolite(Base):
 
 
 # Calculated effects of cohort observations
+class EffectVariantProtein(Base):
+    __tablename__ = 'effects_variant_protein'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    pvalue = Column(Float)
+    effect_size = Column(Float)
+
+class EffectVariantMetabolite(Base):
+    __tablename__ = 'effects_variant_metabolite'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    pvalue = Column(Float)
+    effect_size = Column(Float)
+
+class EffectVariantPhenotype(Base):
+    __tablename__ = 'effects_variant_phenotype'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    variant_id = Column(String, ForeignKey('cohort_genomic_variant.cohort_id'))
+    pvalue = Column(Float)
+    effect_size = Column(Float)
 
 class EffectsProteinProtein(Base):
     __tablename__ = 'effects_protein_protein'

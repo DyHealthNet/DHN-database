@@ -4,7 +4,7 @@ from nedrex.core import api_keys_active, get_api_key
 from sqlalchemy.sql.type_api import Variant
 
 from settings import DEBUG
-from models import CohortGenomicVariant, Genomic_variant
+from models import CohortGenomicVariant, Genomic_variant, EffectVariantProtein, EffectVariantMetabolite, EffectVariantPhenotype
 from nedrex.core import iter_nodes, iter_edges, get_node_types,get_collection_attributes
 nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
 if api_keys_active():
@@ -85,9 +85,56 @@ def read_variant_meta_file(variants_meta_path: str):
         )
         variantSet.add(newVariant)
         if(DEBUG):
-            if(len(variantSet) > 100):
+            if(len(variantSet) > 10000):
                 break
     return variantSet
+
+def read_variant_gwas_file(gwas_stats_path: str):
+    """
+    reads Protein IDs from Chris dataset
+    """
+   # print(head(gwas_stats_df))
+
+    variants_meta_df = pd.read_csv(gwas_stats_path, sep='\t', dtype= str)
+    effectVariantProteinSet = set()
+    effectVariantMetaboliteSet = set()
+    effectVariantPhenotypeSet = set()
+
+    for index, row in variants_meta_df.iterrows():
+        if (DEBUG):
+            if (len(effectVariantPhenotypeSet) > 100):
+                break
+        type = row['type']
+        if(type == "pheno"):
+            newEffectVariantPhenotype = EffectVariantPhenotype(
+                phenotype_id =  row['label'],
+                variant_id =  row['variant'],
+                pvalue =  float(row['pvalue']),
+                effect_size = float(row['eff_size'])
+            )
+
+            effectVariantPhenotypeSet.add(newEffectVariantPhenotype)
+        if (type == "prot"):
+            newEffectVariantProtein = EffectVariantProtein(
+                protein_id=row['label'],
+                variant_id=row['variant'],
+                pvalue=float(row['pvalue']),
+                effect_size=float(row['eff_size'])
+            )
+
+            effectVariantProteinSet.add(newEffectVariantProtein)
+
+
+    return effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet
+
+
+
+
+
+
+
+
+
 
 
 # gwas_stats file contains following columns: | chr,	pos,	ref,	alt,	neglog10_pval_meta,	beta_meta,	label,	type
