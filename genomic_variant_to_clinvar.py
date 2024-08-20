@@ -17,6 +17,7 @@ def read_rsid_chris(variantDataPath: str):
     """
     reads Protein IDs from Chris dataset
     """
+    test =2
     df = pd.read_csv(variantDataPath, sep='\t')
     # check how many nans in the uniprot ocl
     print("Number of nans in variant col:", df['rsid'].isna().sum())

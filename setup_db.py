@@ -462,11 +462,12 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
     session.commit()
 
-def add_cohort_genomic_variants(session, obs_source):
-    variants_meta_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
-    gwas_stats_path = '/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
+def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_path,obs_source):
+    variants_meta_path = genomic_variant_meta_path#'/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
+    gwas_stats_path = gwas_stats_path#'/home/leo/Documents/Uni/Masterpraktikum/data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
     cohort_variants = read_variant_meta_file(variants_meta_path)
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
+    session.commit()
     effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(gwas_stats_path)
 
     rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
@@ -479,11 +480,11 @@ def add_cohort_genomic_variants(session, obs_source):
     add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['id'])
     add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype,['id'])
     add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein,['id'])
-
-
-
     session.commit()
-
+    cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
+    add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
+              filter_args=["cohort_id", "variant_id"])
+    session.commit()
 
 
 def get_cohort_references_variant(session, obs_source):
@@ -509,16 +510,20 @@ def get_cohort_references_variant(session, obs_source):
 
 
 
-def add_genomic_variants_neddrex(session, obs_source):
-    rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
-    rsIDset = read_rsid_chris(rsidPath)
+def add_genomic_variants_neddrex(session, genomic_variant_meta_path,obs_source):
+    #rsidPath = '/home/leo/Documents/Uni/Masterpraktikum/toy_data/variants_meta.csv'
+    #rsIDset = read_rsid_chris(rsidPath)
+    rsIDset = read_rsid_chris(genomic_variant_meta_path)
     rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['variant_primaryDomainId'])
     session.commit()
-    cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
-    add_items(session, cohort_references_variant_to_add, CohortReferencesVariant, filter_args=["cohort_id", "variant_id"])
+    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
+    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source="test")
     session.commit()
+
+
+
 
 def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds,obs_source):
     variant_affects_gene_graph = get_edge_associations(node_ids=clinvarIds, edge_type='variant_affects_gene',
@@ -770,7 +775,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    #delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
 
     metadata = MetaData()
@@ -781,8 +786,8 @@ if __name__ == '__main__':
     METABOLITE_META_PATH = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
     CALCULATED_EDGES_PATH = '../data/scores.csv'
     VARIANT_PATH='../data/dyHealthNet/'
-
-
+    GENOMIC_VARIANT_META_PATH = '../data/DyHealthNet/chris_summary_data/variants/variants_meta.csv'
+    GWAS_STATS_PATH = '../data/DyHealthNet/chris_summary_data/variants/fully_simulated_gwas.tsv'
 
     protein_data_path = PROTEIN_META_PATH
     pheno_data_path = PHENOTYPE_META_PATH
@@ -791,6 +796,8 @@ if __name__ == '__main__':
     genomic_variant_meta_path = GENOMIC_VARIANT_META_PATH
     gwas_stats_path = GWAS_STATS_PATH
     data_dir = DATA_DIR
+
+
     """
     if not all([pheno_data_path, protein_data_path, metabo_data_path, edges_path]):
             raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
@@ -799,28 +806,14 @@ if __name__ == '__main__':
         raise ValueError("Some of the provided paths do not exist.")
     """
     # testingSetup(session)
-    """
+
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_genomic_variants_neddrex(db_session, obs_source="test")
-    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.variant_primaryDomainId).all()}
-    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids,obs_source="test")
-    add_genomic_variants_neddrex(db_session, obs_source="test")
-    #add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS) # delete
-    """
-    add_cohort_genomic_variants(db_session,obs_source="test")
-    add_genomic_variants_neddrex(db_session, obs_source="test")
+    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
 
-    #add_genomic_variants_neddrex(db_session, obs_source="test")
+    add_genomic_variants_neddrex(db_session, genomic_variant_meta_path,obs_source="test")
 
-
-    #add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    #gene_ids = {str(row[0]) for row in db_session.query(Gene.entrez_id).all()}
-
-    #add_genomic_variants(db_session, gene_ids, observation_source='external')
-
-    """
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
@@ -829,8 +822,9 @@ if __name__ == '__main__':
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    add_cohort_genomic_variants(session=db_session, obs_source="test")
-    """
+    add_cohort_genomic_variants(db_session,genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+
+
     """"
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
