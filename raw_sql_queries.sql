@@ -143,6 +143,9 @@ FROM protein_associates_protein e1
 JOIN nodes n1 ON e1.uniprot_id_1 = n1.node_id
 JOIN nodes n2 ON e1.uniprot_id_2 = n2.node_id;
 
+SET enable_indexscan = off;
+SET enable_bitmapscan = off;
+
 SELECT *
 FROM view_description_fts
 WHERE to_tsvector('english', description) @@ plainto_tsquery('english','A2 receptor') OR
