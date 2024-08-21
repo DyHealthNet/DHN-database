@@ -510,7 +510,7 @@ def get_cohort_references_variant(session, obs_source):
         if (dbsnp_id in existing_rsids_ids and clinvar_id in existing_clin_var_ids):
             newCohortReferencesVariant = CohortReferencesVariant(
                 cohort_id=dbsnp_id,
-                variant_id=clinvar_id
+                clinvar_id=clinvar_id
             )
             newCohortReferencesSet.add(newCohortReferencesVariant)
     return (newCohortReferencesSet)
