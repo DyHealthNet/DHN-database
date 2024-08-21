@@ -9,10 +9,8 @@ Base = declarative_base()
 class CohortGenomicVariant(Base):
     __tablename__ = 'cohort_variant'
     cohort_id = Column(String, primary_key=True)
-    chrom = Column(String)
-    pos = Column(String)
-    ref = Column(String)
-    alt = Column(String)
+    display_name = Column(String)
+    description = Column(String)
     # TBD description = all info merged into String
     # TBDdisplay Name = cohort_id
 
@@ -99,9 +97,8 @@ class Genomic_variant(Base):
     clinvar_id = Column(String, primary_key=True)  # clinvar.17735
     alternativeSequence = Column(String)  # 'T',
     chromosome = Column(String)  # 'NW_009646201.1',
-    created = Column(String)  # '2024-06-17T12:36:21.275000'
     dataSources = Column(String)  # ['clinvar'],
-    domainIds = Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
+    xrefs = Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
     position = Column(String)  # 83614,
     referenceSequence = Column(String)  # 'TC',
     type = Column(String)  # 'GenomicVariant'
@@ -154,8 +151,10 @@ class EffectVariantProtein(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
-    pvalue = Column(Float)
+    p_value = Column(Float)
     effect_size = Column(Float)
+    effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectVariantMetabolite(Base):
@@ -163,8 +162,10 @@ class EffectVariantMetabolite(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
-    pvalue = Column(Float)
+    p_value = Column(Float)
     effect_size = Column(Float)
+    effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectVariantPhenotype(Base):
@@ -172,8 +173,10 @@ class EffectVariantPhenotype(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
-    pvalue = Column(Float)
+    p_value = Column(Float)
     effect_size = Column(Float)
+    effect_size_type = Column(String)
+    test_statistic = Column(String)
 
 
 class EffectsProteinProtein(Base):

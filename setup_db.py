@@ -457,6 +457,9 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                 continue
             metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
 
+        if DEBUG and len(metabolites) > 100:
+            break
+
     print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
           f"as well as {len(metabolite_protein_associations)} protein associations and "
           f"{len(metabolite_disease_associations)} disease associations.")
@@ -467,9 +470,9 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
 
 
 def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_path, obs_source):
-    variants_meta_path = genomic_variant_meta_path
+
     gwas_stats_path = gwas_stats_path
-    cohort_variants = read_variant_meta_file(variants_meta_path)
+    cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'])
     session.commit()
     effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
@@ -485,26 +488,25 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
                                            obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
     effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if
                                           obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
-    add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['id'])
-    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['id'])
-    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['id'])
+    add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['metabolite_id','variant_id'])
+    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['phenotype_id','variant_id'])
+    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['protein_id','variant_id'])
     session.commit()
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
-              filter_args=["cohort_id", "variant_id"])
+              filter_args=["cohort_id", "clinvar_id"])
     session.commit()
 
 
 def get_cohort_references_variant(session, obs_source):
     genomic_variants = session.query(Genomic_variant).all()
-
     # If you want to do something with these objects, you can loop through them
     newCohortReferencesSet = set()
     existing_rsids_ids = {str(row[0]) for row in session.query(CohortGenomicVariant.cohort_id).all()}
     existing_clin_var_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
 
     for variant in genomic_variants:
-        variant_domain_ids = variant.domainIds.replace(",", "").replace("[", "").replace("]", "").replace("'",
+        variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'",
                                                                                                           "").split()
         dbsnp_id = next((id.replace("dbsnp.", "rs") for id in variant_domain_ids if "dbsnp." in id), None)
         clinvar_id = next((id for id in variant_domain_ids if "clinvar." in id), None)
@@ -514,6 +516,8 @@ def get_cohort_references_variant(session, obs_source):
                 clinvar_id=clinvar_id
             )
             newCohortReferencesSet.add(newCohortReferencesVariant)
+
+    test=2
     return (newCohortReferencesSet)
 
 
@@ -526,7 +530,7 @@ def add_genomic_variants_neddrex(session, genomic_variant_meta_path, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
     genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
-    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source="test")
+    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source=obs_source)
     session.commit()
 
 
@@ -577,7 +581,6 @@ def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds, obs_sourc
 
     # stmt = select([genomic_variants.c.id]).where(genomic_variants.c.id == id_to_check)
     # result = db_session.execute(stmt).first()
-    test = 2
     return None
 
 
@@ -599,9 +602,8 @@ def add_genomic_variants_linking_from_gene(session, entrez_ids: set[str] = None,
             newVariant = Genomic_variant(clinvar_id=node['primaryDomainId'],  # linvar.17735
                                          alternativeSequence=node['alternativeSequence'],  # 'T',
                                          chromosome=node['chromosome'],  # 'NW_009646201.1',
-                                         created=node['created'],  # '2024-06-17T12:36:21.275000'
                                          dataSources=node['dataSources'],  # ['clinvar'],
-                                         domainIds=node['domainIds'],  # ['clinvar.17735', 'dbsnp.1556058284']
+                                         xrefs=node['domainIds'],  # ['clinvar.17735', 'dbsnp.1556058284']
                                          position=node['position'],  # 83614,
                                          referenceSequence=node['referenceSequence'],  # 'TC',
                                          type=node['type'],  # 'GenomicVariant'
@@ -653,6 +655,21 @@ def countEntries(session, metadata):
         print(f"Table {table_name} has {count} rows.")
     print("Total number of rows in the database: ", sum(table_counts.values()))
 
+def calculateCoverage(session, metadata):
+    table_counts = {}
+    # Iterate over each table in the metadata
+    for table_name in metadata.tables:
+        table = Table(table_name, metadata, autoload_with=engine)
+        count = session.query(table).count()
+        table_counts[table_name] = count
+        if(table_name.contains("references")):
+            uniqueTableName=table_name + "_unique"
+            table_counts[uniqueTableName] = table_counts[table_name]
+
+
+
+
+
 
 def testingSetup(session):
     protein = test_protein(5)
@@ -667,12 +684,10 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    delete_tables(db_session)
+    #delete_tables(db_session)
     dotenv.load_dotenv()
-
     metadata = MetaData()
     create_tables()
-
     protein_data_path = PROTEIN_PATH
     pheno_data_path = PHENO_PATH
     metabo_data_path = METABOLITE_PATH
@@ -688,12 +703,11 @@ if __name__ == '__main__':
     if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
-
+    
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-
     add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
 
     # second pass for phenotypes

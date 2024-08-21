@@ -19,13 +19,11 @@ def read_rsid_chris(variantDataPath: str):
     """
     reads Protein IDs from Chris dataset
     """
-    test = 2
     df = pd.read_csv(variantDataPath, sep='\t')
     # check how many nans in the uniprot ocl
     print("Number of nans in variant col:", df['rsid'].isna().sum())
     df['rsid'] = df['rsid'].fillna('')
     rsids = df['rsid'].unique().tolist()
-    # uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
     return rsids
 
 
@@ -41,8 +39,6 @@ def get_genomic_variant_nodes(clinvarIds, obs_source):
         primary_domain_id = node['domainIds']
         if len(primary_domain_id) > 1:
             primary_domain_id = node['domainIds'][1]
-            test = 2
-
         else:
             continue
 
@@ -52,9 +48,8 @@ def get_genomic_variant_nodes(clinvarIds, obs_source):
                 # Column(String, primary_key=True)  # clinvar.17735
                 alternativeSequence=str(node.get('alternativeSequence')),  # Column(String)  # 'T',
                 chromosome=str(node.get('chromosome')),  # Column(String)  # 'NW_009646201.1',
-                created=str(node.get('created')),  # Column(String)  # '2024-06-17T12:36:21.275000'
                 dataSources=str(node.get('dataSources')),  # Column(String)  # ['clinvar'],
-                domainIds=str(node.get('domainIds')),  # Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
+                xrefs=str(node.get('domainIds')),  # Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
                 position=str(node.get('position')),  # Column(String)  # 83614,
                 referenceSequence=str(node.get('referenceSequence')),  # Column(String)  # 'TC',
                 type=str(node.get('type')),  # Column(String)  # 'GenomicVariant'
@@ -82,10 +77,8 @@ def read_variant_meta_file(variants_meta_path: str):
     for index, row in variants_meta_df.iterrows():
         newVariant = CohortGenomicVariant(
             cohort_id=row['rsid'],
-            chrom=row['chrom'],
-            pos=row['pos'],
-            ref=row['ref'],
-            alt=row['alt']
+            display_name =row['rsid'],
+            description=str(row['chrom']+ ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
 
         )
         variantSet.add(newVariant)
@@ -114,28 +107,35 @@ def read_variant_gwas_file(gwas_stats_path: str):
         type = row['type']
         if (type == "pheno"):
             newEffectVariantPhenotype = EffectVariantPhenotype(
-                phenotype_id=row['label'],
-                variant_id=row['variant'],
-                pvalue=float(row['pvalue']),
-                effect_size=float(row['eff_size'])
+                phenotype_id=row['label2'],
+                variant_id=row['label1'],
+                p_value=float(row['pval']),
+                effect_size=float(row['effsize']),
+                effect_size_type=row['effsize_type'],
+                test_statistic=row['test']
+
             )
 
             effectVariantPhenotypeSet.add(newEffectVariantPhenotype)
         if (type == "prot"):
             newEffectVariantProtein = EffectVariantProtein(
-                protein_id=row['label'],
-                variant_id=row['variant'],
-                pvalue=float(row['pvalue']),
-                effect_size=float(row['eff_size'])
+                protein_id=row['label2'],
+                variant_id=row['label1'],
+                p_value=float(row['pval']),
+                effect_size=float(row['effsize']),
+                effect_size_type = row['effsize_type'],
+                test_statistic = row['test']
             )
 
             effectVariantProteinSet.add(newEffectVariantProtein)
         if (type == "metab"):
             newEffectVariantMetabolite = EffectVariantMetabolite(
-                metabolite_id=row['label'],
-                variant_id=row['variant'],
-                pvalue=float(row['pvalue']),
-                effect_size=float(row['eff_size'])
+                metabolite_id=row['label2'],
+                variant_id=row['label1'],
+                p_value=float(row['pval']),
+                effect_size=float(row['effsize']),
+                effect_size_type=row['effsize_type'],
+                test_statistic=row['test']
             )
             effectVariantMetaboliteSet.add(newEffectVariantMetabolite)
 
