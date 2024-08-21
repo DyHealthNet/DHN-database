@@ -714,6 +714,8 @@ def calculateCoverage(session):
         ("genomic_variants", genomic_variant_coverage)
     ]
     coveragefilename = '../data/DyHealthNet/coverage_summary.csv'
+    if not os.path.exists(os.path.dirname(coveragefilename)):
+        os.makedirs(os.path.dirname(coveragefilename))
     with open(coveragefilename, mode='w', newline='') as file:
         writer = csv.writer(file)
         # Writing the header
@@ -759,13 +761,13 @@ if __name__ == '__main__':
         raise ValueError("Some of the provided paths do not exist.")
 
     add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
-    # add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    # add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    # add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    # add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
 
     # second pass for phenotypes
-    # add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
     # add cohort phenotype data as the mapping is incomplete
 
