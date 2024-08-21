@@ -667,7 +667,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    # delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
 
     metadata = MetaData()
