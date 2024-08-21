@@ -17,6 +17,7 @@ from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_
 from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
     get_harmonizome_data, get_gene_data, get_phenotype_data
 from database_views import add_views, add_indexes
+import csv
 
 url = url_object = URL.create(
     "postgresql",
@@ -696,22 +697,33 @@ def calculateCoverage(session):
         genomic_variant_coverage = "NA"
 
     # Output the results
-    print(f"Unique metabolite_cohort count: {unique_cohort_ids_metabolite}")
-    print(f"Unique hmdb_id count: {unique_hmdb_ids_count}")
-    print(f"metabolite_coverage: {metabolite_coverage}")
+    coverage =[
+    ("Unique metabolite_cohort count", unique_cohort_ids_metabolite),
+    ("Unique hmdb_id count", unique_hmdb_ids_count),
+    ("metabolite_coverage",metabolite_coverage),
 
-    print(f"Unique protein_cohort count: {unique_cohort_ids_protein}")
-    print(f"Unique uniprot_id count: {unique_uniprot_ids_count}")
-    print(f"protein_coverage: {protein_coverage}")
+    ("Unique protein_cohort count", unique_cohort_ids_protein),
+    ("Unique uniprot_id count",unique_uniprot_ids_count),
+    ("protein_coverage", protein_coverage),
 
-    print(f"Unique phenotype_cohort count: {unique_cohort_ids_phenotype}")
-    print(f"Unique hpo_id count: {unique_hpo_ids_count}")
-    print(f"phenotype_coverage: {phenotype_coverage}")
+    ("Unique phenotype_cohort count", unique_cohort_ids_phenotype),
+    ("Unique hpo_id count", unique_hpo_ids_count),
+    ("phenotype_coverage", phenotype_coverage),
 
-    print(f"Unique genomic variants_cohort_id count: {unique_cohort_ids_genomic_variant}")
-    print(f"Unique clinvar_id count: {unique_clinvar_ids_count}")
-    print(f"genomic_variants: {genomic_variant_coverage}")
+    ("Unique genomic variants_cohort_id count" , unique_cohort_ids_genomic_variant),
+    ("Unique clinvar_id count ", unique_clinvar_ids_count),
+    ("genomic_variants", genomic_variant_coverage)
+    ]
+    coveragefilename = '../data/DyHealthNet/coverage_summary.csv'
+    with open(coveragefilename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        # Writing the header
+        writer.writerow(["ValueName", "Value"])
+        # Writing the data
+        writer.writerows(coverage)
 
+    print(f"Data successfully written to {coveragefilename}")
+    print(coverage)
 
 def testingSetup(session):
     protein = test_protein(5)
