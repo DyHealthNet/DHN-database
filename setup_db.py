@@ -7,7 +7,7 @@ from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase
 from calculated_edges import add_calculated_edges
-from sqlalchemy import URL, text, Table, MetaData
+from sqlalchemy import URL, text, Table, MetaData, distinct
 from protein_mapping import read_proteinID_chris, get_protein_nodes
 from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, \
     read_variant_gwas_file
@@ -652,7 +652,7 @@ def countEntries(session, metadata):
     for table_name, count in table_counts.items():
         print(f"Table {table_name} has {count} rows.")
     print("Total number of rows in the database: ", sum(table_counts.values()))
-
+"""
 def calculateCoverage(session, metadata):
     table_counts = {}
     # Iterate over each table in the metadata
@@ -663,10 +663,54 @@ def calculateCoverage(session, metadata):
         if(table_name.contains("references")):
             uniqueTableName=table_name + "_unique"
             table_counts[uniqueTableName] = table_counts[table_name]
+"""
+def calculateCoverage(session):
+    #metabolites
+    unique_cohort_ids_metabolite = session.query(distinct(CohortReferencesMetabolite.cohort_id)).count()
+    unique_hmdb_ids_count = session.query(distinct(Metabolite.hmdb_id)).count()
+    try:
+        metabolite_coverage = round(unique_cohort_ids_metabolite/unique_hmdb_ids_count,2)
+    except:
+        metabolite_coverage = "NA"
+    #proteins
 
+    unique_cohort_ids_protein = session.query(distinct(CohortReferencesProtein.cohort_id)).count()
+    unique_uniprot_ids_count = session.query(distinct(Protein.uniprot_id)).count()
+    try:
+        protein_coverage = unique_uniprot_ids_count/unique_cohort_ids_protein
+    except:
+        protein_coverage = "NA"
+    #phenotypes
+    unique_cohort_ids_phenotype = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
+    unique_hpo_ids_count = session.query(distinct(Phenotype.hpo_id)).count()
+    try:
+        phenotype_coverage = unique_hpo_ids_count/unique_cohort_ids_phenotype
+    except:
+        phenotype_coverage = "NA"
+    #genomic_variant
+    unique_cohort_ids_genomic_variant = session.query(distinct(CohortReferencesVariant.cohort_id)).count()
+    unique_clinvar_ids_count = session.query(distinct(Genomic_variant.clinvar_id)).count()
+    try:
+        genomic_variant_coverage = unique_clinvar_ids_count/unique_cohort_ids_genomic_variant
+    except:
+        genomic_variant_coverage = "NA"
 
+    # Output the results
+    print(f"Unique metabolite_cohort count: {unique_cohort_ids_metabolite}")
+    print(f"Unique hmdb_id count: {unique_hmdb_ids_count}")
+    print(f"metabolite_coverage: {metabolite_coverage}")
 
+    print(f"Unique protein_cohort count: {unique_cohort_ids_protein}")
+    print(f"Unique uniprot_id count: {unique_uniprot_ids_count}")
+    print(f"protein_coverage: {protein_coverage}")
 
+    print(f"Unique phenotype_cohort count: {unique_cohort_ids_phenotype}")
+    print(f"Unique hpo_id count: {unique_hpo_ids_count}")
+    print(f"phenotype_coverage: {phenotype_coverage}")
+
+    print(f"Unique genomic variants_cohort_id count: {unique_cohort_ids_genomic_variant}")
+    print(f"Unique clinvar_id count: {unique_clinvar_ids_count}")
+    print(f"genomic_variants: {genomic_variant_coverage}")
 
 
 def testingSetup(session):
@@ -701,7 +745,7 @@ if __name__ == '__main__':
     if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
-    
+    """
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
@@ -720,10 +764,11 @@ if __name__ == '__main__':
 
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
-
+    """
+    calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
-    countEntries(db_session, metadata)
+    #countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
     add_views(db_session)
