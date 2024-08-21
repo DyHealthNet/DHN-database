@@ -667,31 +667,31 @@ def calculateCoverage(session, metadata):
 def calculateCoverage(session):
     #metabolites
     unique_cohort_ids_metabolite = session.query(distinct(CohortReferencesMetabolite.cohort_id)).count()
-    unique_hmdb_ids_count = session.query(distinct(Metabolite.hmdb_id)).count()
+    unique_hmdb_ids_count = session.query(distinct(CohortMetabolite.cohort_id)).count()
     try:
-        metabolite_coverage = round(unique_cohort_ids_metabolite/unique_hmdb_ids_count,2)
+        metabolite_coverage = round(unique_cohort_ids_metabolite/unique_hmdb_ids_count,3)
     except:
         metabolite_coverage = "NA"
     #proteins
 
     unique_cohort_ids_protein = session.query(distinct(CohortReferencesProtein.cohort_id)).count()
-    unique_uniprot_ids_count = session.query(distinct(Protein.uniprot_id)).count()
+    unique_uniprot_ids_count = session.query(distinct(CohortProtein.cohort_id)).count()
     try:
-        protein_coverage = unique_uniprot_ids_count/unique_cohort_ids_protein
+        protein_coverage = round(unique_cohort_ids_protein/unique_uniprot_ids_count,3)
     except:
         protein_coverage = "NA"
     #phenotypes
     unique_cohort_ids_phenotype = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
-    unique_hpo_ids_count = session.query(distinct(Phenotype.hpo_id)).count()
+    unique_hpo_ids_count = session.query(distinct(CohortPhenotype.cohort_id)).count()
     try:
-        phenotype_coverage = unique_hpo_ids_count/unique_cohort_ids_phenotype
+        phenotype_coverage = round(unique_cohort_ids_phenotype/unique_hpo_ids_count,3)
     except:
         phenotype_coverage = "NA"
     #genomic_variant
     unique_cohort_ids_genomic_variant = session.query(distinct(CohortReferencesVariant.cohort_id)).count()
-    unique_clinvar_ids_count = session.query(distinct(Genomic_variant.clinvar_id)).count()
+    unique_clinvar_ids_count = session.query(distinct(CohortGenomicVariant.cohort_id)).count()
     try:
-        genomic_variant_coverage = unique_clinvar_ids_count/unique_cohort_ids_genomic_variant
+        genomic_variant_coverage = round(unique_cohort_ids_genomic_variant/unique_clinvar_ids_count,3)
     except:
         genomic_variant_coverage = "NA"
 
