@@ -28,13 +28,13 @@ def read_rsid_chris(variantDataPath: str):
 
 
 def get_genomic_variant_nodes(clinvarIds, obs_source):
-    print("UniProt IDs:", len(clinvarIds))
+    print("Genomic_variant IDs:", len(clinvarIds))
     # clinvarIds = ['clinvar.' + str(item) for item in clinvarIds]
     noIds = len(clinvarIds)
     foundGenomicVariants = []
-    found_proteins = 0
+    found_genomic_variants = 0
     for node in iter_nodes('genomic_variant'):
-        if (found_proteins >= noIds):
+        if (found_genomic_variants >= noIds):
             break
         primary_domain_id = node['domainIds']
         if len(primary_domain_id) > 1:
@@ -58,9 +58,9 @@ def get_genomic_variant_nodes(clinvarIds, obs_source):
 
             )
             foundGenomicVariants.append(genomic_variant)
-            found_proteins += 1
+            found_genomic_variants += 1
         if DEBUG:
-            if found_proteins > 100:
+            if found_genomic_variants > 100:
                 break
 
     return foundGenomicVariants

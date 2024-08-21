@@ -684,7 +684,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    #delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()
@@ -703,7 +703,7 @@ if __name__ == '__main__':
     if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
-    
+
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
@@ -713,7 +713,7 @@ if __name__ == '__main__':
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
-    # add cohort phenotype data as the mapping is incomplete
+    #add cohort phenotype data as the mapping is incomplete
 
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
@@ -721,7 +721,7 @@ if __name__ == '__main__':
     add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+   # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)

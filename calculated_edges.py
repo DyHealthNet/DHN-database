@@ -201,7 +201,7 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
 
     if DEBUG:
         chunk_size = 10_000
-        num_chunks = 2
+        num_chunks = 1
         edges = edges.sample(frac=1)
 
     for i in range(num_chunks):
