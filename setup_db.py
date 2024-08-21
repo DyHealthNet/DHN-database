@@ -457,8 +457,6 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
                 continue
             metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
 
-        if DEBUG and len(metabolites) > 100:
-            break
 
     print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
           f"as well as {len(metabolite_protein_associations)} protein associations and "
@@ -684,7 +682,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    #delete_tables(db_session)
+    # delete_tables(db_session)
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()

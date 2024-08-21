@@ -11,8 +11,6 @@ class CohortGenomicVariant(Base):
     cohort_id = Column(String, primary_key=True)
     display_name = Column(String)
     description = Column(String)
-    # TBD description = all info merged into String
-    # TBDdisplay Name = cohort_id
 
 
 class CohortPhenotype(Base):
