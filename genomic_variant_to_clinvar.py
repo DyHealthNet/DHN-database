@@ -2,6 +2,7 @@ import pandas as pd
 import nedrex
 from nedrex.core import api_keys_active, get_api_key
 from sqlalchemy.sql.type_api import Variant
+import tqdm
 
 from settings import DEBUG
 from models import CohortGenomicVariant, Genomic_variant, EffectVariantProtein, EffectVariantMetabolite, \
@@ -73,17 +74,18 @@ def read_variant_meta_file(variants_meta_path: str):
     # print(head(gwas_stats_df))
 
     variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str).drop(columns=['Unnamed: 0'])
+    print("Iterating through gwas file")
     variantSet = set()
     for index, row in variants_meta_df.iterrows():
         newVariant = CohortGenomicVariant(
             cohort_id=row['rsid'],
             display_name =row['rsid'],
-            description=str(row['chrom']+ ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
+            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
 
         )
         variantSet.add(newVariant)
-        if (DEBUG):
-            if (len(variantSet) > 10000):
+        if DEBUG:
+            if len(variantSet) > 10000:
                 break
     return variantSet
 
