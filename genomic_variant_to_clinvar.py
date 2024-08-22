@@ -92,10 +92,9 @@ def read_variant_meta_file(variants_meta_path: str):
         newVariant = CohortGenomicVariant(
            # cohort_id=row['rsid'] + str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
             cohort_id=str(row['chrom'] + ":" +  row['pos'] + ":" + row['ref'] + ">" + row['alt']),
-            display_name =row['rsid'],
-            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
+            description =row['rsid'],
+            display_name=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
 
-            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
             xrefs=f"rsid.{row['rsid']}",
         )
         variantSet.add(newVariant)

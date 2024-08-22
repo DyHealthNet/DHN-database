@@ -480,9 +480,9 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
     gwas_stats_path = gwas_stats_path
     cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
     # remove all cohort genomic variants with the same cohort_id
-    id_counts = Counter(x.cohort_id for x in cohort_variants)
-    cohort_variants = [x for x in cohort_variants if id_counts[x.cohort_id] == 1]
-    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
+    #id_counts = Counter(x.cohort_id for x in cohort_variants)
+    #cohort_variants = [x for x in cohort_variants if id_counts[x.cohort_id] == 1]
+    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=False)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
     effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
@@ -515,15 +515,16 @@ def get_cohort_references_variant(session, obs_source):
     genomic_variants = session.query(Genomic_variant).all()
     newCohortReferencesSet = set()
     #existing_rsids_display = {str(row[0]) for row in session.query(CohortGenomicVariant.display_name).all()}
-    existing_cohort_id = {x[0] for x in session.query(CohortGenomicVariant.cohort_id).all()}
+    existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}") for genomic_variant in session.query(CohortGenomicVariant).all()}
     #existing_clinvar_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
     for variant in genomic_variants:
         variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'","").split()
         ref_cohort_id =str(variant.chromosome + ":" + variant.position + ":" + variant.referenceSequence + ">" + variant.alternativeSequence)
         dbsnp_id = next((id.replace("dbsnp.", "rs") for id in variant_domain_ids if "dbsnp." in id), None)
         clinvar_id = variant.clinvar_id
+        alt_seq = variant.alternativeSequence
         #next((id for id in variant_domain_ids if "clinvar." in id), None)
-        if (ref_cohort_id in existing_cohort_id):
+        if ((dbsnp_id, alt_seq) in existing_cohort_id):
             newCohortReferencesVariant = CohortReferencesVariant(
                 cohort_id=ref_cohort_id,
                 clinvar_id=clinvar_id
@@ -771,7 +772,7 @@ if __name__ == '__main__':
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
-    add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+    #add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
     """
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
