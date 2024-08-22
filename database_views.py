@@ -81,7 +81,7 @@ def add_views(session):
         UNION ALL
         SELECT hmdb_id AS source_id, mondo_id AS target_id FROM metabolite_associates_disorder
         UNION ALL
-        SELECT clinvar_id AS source_id, entrez_id AS target_id FROM variant_affects_gene;
+        SELECT clinvar_id AS source_id, entrez_id AS target_id FROM variant_associates_gene;
         """
         session.execute(text(view_sql))
         print("Created view view_associations_edges.")

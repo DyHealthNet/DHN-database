@@ -79,21 +79,6 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
     return foundGenomicVariants
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def read_variant_meta_file(variants_meta_path: str):
     """
     reads Protein IDs from Chris dataset
@@ -110,6 +95,8 @@ def read_variant_meta_file(variants_meta_path: str):
             display_name =row['rsid'],
             description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
 
+            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
+            xrefs=f"rsid.{row['rsid']}",
         )
         variantSet.add(newVariant)
         if DEBUG:

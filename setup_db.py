@@ -1,7 +1,7 @@
 import networkx as nx
 from settings import *
 from nedrex.core import iter_nodes, iter_edges, get_node_types
-
+from collections import Counter
 from testcases import *
 from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
@@ -364,8 +364,11 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_protein_data(session, proteinData_path, obs_source):
-    proteinIds = read_proteinID_chris(proteinData_path)
+def add_protein_data(session, proteinData_path = None, obs_source = None, missing_ids = None):
+    if missing_ids is None:
+        proteinIds = read_proteinID_chris(proteinData_path)
+    else:
+        proteinIds = missing_ids
     proteinNodes, found_proteins = get_protein_nodes(proteinIds, obs_source)
     needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in proteinIds}
     print(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
@@ -441,7 +444,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
 
     add_missing(session, missing_diseases, 'disorders')
-    # add_missing(session, missing_proteins, 'proteins')
+    add_missing(session, missing_proteins, 'proteins')
 
     for metabolite in hmdb_mapping:
         metabolite_name = f"hmdb.{metabolite}"
@@ -477,9 +480,9 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
     gwas_stats_path = gwas_stats_path
     cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
     # remove all cohort genomic variants with the same cohort_id
-    all_ids = [x.cohort_id for x in cohort_variants]
-    cohort_variants = {x for x in cohort_variants if all_ids.count(x.cohort_id) == 1}
-    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=False)
+    id_counts = Counter(x.cohort_id for x in cohort_variants)
+    cohort_variants = [x for x in cohort_variants if id_counts[x.cohort_id] == 1]
+    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
     effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
@@ -772,8 +775,8 @@ if __name__ == '__main__':
     """
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
 
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
@@ -789,7 +792,7 @@ if __name__ == '__main__':
     # add the edges calculated from the available data
     # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    calculateCoverage(db_session)
+    # calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     # countEntries(db_session, metadata)
