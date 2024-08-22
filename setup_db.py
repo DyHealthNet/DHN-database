@@ -1,7 +1,7 @@
 import networkx as nx
 from settings import *
 from nedrex.core import iter_nodes, iter_edges, get_node_types
-
+from collections import Counter
 from testcases import *
 from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
@@ -202,6 +202,7 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
         session.bulk_save_objects(items)
         session.commit()
         return
+
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
         exists = session.query(column).filter_by(**filter_values).first()
@@ -477,8 +478,8 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
     gwas_stats_path = gwas_stats_path
     cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
     # remove all cohort genomic variants with the same cohort_id
-    all_ids = [x.cohort_id for x in cohort_variants]
-    cohort_variants = {x for x in cohort_variants if all_ids.count(x.cohort_id) == 1}
+    id_counts = Counter(x.cohort_id for x in cohort_variants)
+    cohort_variants = [x for x in cohort_variants if id_counts[x.cohort_id] == 1]
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
