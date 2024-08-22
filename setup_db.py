@@ -365,8 +365,11 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_protein_data(session, proteinData_path, obs_source):
-    proteinIds = read_proteinID_chris(proteinData_path)
+def add_protein_data(session, proteinData_path = None, obs_source = None, missing_ids = None):
+    if missing_ids is None:
+        proteinIds = read_proteinID_chris(proteinData_path)
+    else:
+        proteinIds = missing_ids
     proteinNodes, found_proteins = get_protein_nodes(proteinIds, obs_source)
     needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in proteinIds}
     print(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
