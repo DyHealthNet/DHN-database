@@ -442,7 +442,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     .filter_by(mondo_id=omim_mapping.get(f"omim.{x}", None)).first() is None}
 
     add_missing(session, missing_diseases, 'disorders')
-    # add_missing(session, missing_proteins, 'proteins')
+    add_missing(session, missing_proteins, 'proteins')
 
     for metabolite in hmdb_mapping:
         metabolite_name = f"hmdb.{metabolite}"
@@ -764,8 +764,8 @@ if __name__ == '__main__':
     add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
 
     # second pass for phenotypes
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
@@ -780,7 +780,7 @@ if __name__ == '__main__':
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    calculateCoverage(db_session)
+    # calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     # countEntries(db_session, metadata)

@@ -134,4 +134,3 @@ def add_indexes(session, engine, metadata):
                          "ON view_description_fts USING gin(to_tsvector('english', description));"))
     print("Created indexes")
     session.commit()
-    
