@@ -480,33 +480,31 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
     gwas_stats_path = gwas_stats_path
     cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
     # # remove all cohort genomic variants with the same cohort_id
-    # # id_counts = Counter(x.cohort_id for x in cohort_variants)
-    # # cohort_variants = [x for x in cohort_variants if id_counts[x.cohort_id] == 1]
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
     session.commit()
-    # print(f"Added {len(cohort_variants)} cohort genomic variants")
-    # effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
-    #     gwas_stats_path)
-    #
-    # rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
-    # phenotype_ids = {str(row[0]) for row in db_session.query(CohortPhenotype.cohort_id).all()}
-    # protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
-    # metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
-    # effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if
-    #                                     obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
-    # effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if
-    #                                        obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
-    # effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if
-    #                                       obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
-    # add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
-    #           bulk=True)
-    # add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
-    #           bulk=True)
-    # add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
-    # session.commit()
-    # print(f"Added {len(effectVariantProteinSet_filtered)} variant-protein associations, "
-    #       f"{len(effectVariantMetaboliteSet_filtered)} variant-metabolite associations, and "
-    #       f"{len(effectVariantPhenotypeSet_filtered)} variant-phenotype associations")
+    print(f"Added {len(cohort_variants)} cohort genomic variants")
+    effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
+        gwas_stats_path)
+
+    rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
+    phenotype_ids = {str(row[0]) for row in db_session.query(CohortPhenotype.cohort_id).all()}
+    protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
+    metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
+    effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if
+                                        obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+    effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if
+                                           obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+    effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if
+                                          obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+    add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
+              bulk=True)
+    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
+              bulk=True)
+    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
+    session.commit()
+    print(f"Added {len(effectVariantProteinSet_filtered)} variant-protein associations, "
+          f"{len(effectVariantMetaboliteSet_filtered)} variant-metabolite associations, and "
+          f"{len(effectVariantPhenotypeSet_filtered)} variant-phenotype associations")
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
               filter_args=["cohort_id", "clinvar_id"])
@@ -517,10 +515,11 @@ def get_cohort_references_variant(session, obs_source):
     genomic_variants = session.query(Genomic_variant).all()
     newCohortReferencesSet = set()
     # existing_rsids_display = {str(row[0]) for row in session.query(CohortGenomicVariant.display_name).all()}
+    query_result = session.query(CohortGenomicVariant).all()
     existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
-                          for genomic_variant in session.query(CohortGenomicVariant).all()}
+                          for genomic_variant in query_result}
     desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
-                for genomic_variant in session.query(CohortGenomicVariant).all()}
+                for genomic_variant in query_result}
     # existing_clinvar_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
     for variant in genomic_variants:
         variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'", "").split()
