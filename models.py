@@ -151,6 +151,7 @@ class EffectVariantProtein(Base):
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     p_value = Column(Float)
+    adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
     test_statistic = Column(String)
@@ -162,6 +163,7 @@ class EffectVariantMetabolite(Base):
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     p_value = Column(Float)
+    adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
     test_statistic = Column(String)
@@ -173,6 +175,7 @@ class EffectVariantPhenotype(Base):
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     p_value = Column(Float)
+    adjusted_p_value = Column(Float)
     effect_size = Column(Float)
     effect_size_type = Column(String)
     test_statistic = Column(String)
@@ -275,7 +278,7 @@ class ProteinAssocProtein(Base):
 
 
 class Variant_affects_gene(Base):
-    __tablename__ = 'variant_affects_gene'
+    __tablename__ = 'variant_associates_gene'
     id = Column(Integer, primary_key=True, autoincrement=True)
     clinvar_id = Column(String, ForeignKey('genomic_variant.clinvar_id'))
     entrez_id = Column(String, ForeignKey('gene.entrez_id'))
