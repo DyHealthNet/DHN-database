@@ -544,9 +544,11 @@ def add_genomic_variants_neddrex(session, genomic_variant_meta_path, obs_source)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
+    print(f"Added {len(variants_to_add)} genomic variants")
     genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
     add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source=obs_source)
     session.commit()
+    print("Added variant affects gene edges")
 
 
 def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds, obs_source):

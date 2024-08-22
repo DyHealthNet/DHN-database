@@ -33,7 +33,7 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
     print("Genomic_variant IDs:", len(rsIdfromCohortDataframe))
     # clinvarIds = ['clinvar.' + str(item) for item in clinvarIds]
     noIds = len(rsIdfromCohortDataframe)
-    rsIds_with_alt_seq = zip(rsIdfromCohortDataframe['rsid'], rsIdfromCohortDataframe['alt'])
+    rsIds_with_alt_seq = set(zip(rsIdfromCohortDataframe['rsid'], rsIdfromCohortDataframe['alt']))
 
     foundGenomicVariants = []
     found_genomic_variants = 0
