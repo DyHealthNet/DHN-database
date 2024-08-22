@@ -49,7 +49,8 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
         else:
             continue
         alternate_sequence = node.get('alternativeSequence')
-        lookup = rsIdfromCohortDataframe[(rsIdfromCohortDataframe['rsid'] == rs_id_genomic_variant ) & (rsIdfromCohortDataframe['alt'] == alternate_sequence)]
+        lookup = rsIdfromCohortDataframe[(rsIdfromCohortDataframe['rsid'] == rs_id_genomic_variant) &
+                                         (rsIdfromCohortDataframe['alt'] == alternate_sequence)]
         lookupboolean = lookup.empty
         test =2
         # subset auf das dataframe auf spalte rsid mit db alt
@@ -68,7 +69,6 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
                 type=str(node.get('type')),  # Column(String)  # 'GenomicVariant'
                 variantType=str(node.get('variantType')),  # Column(String)  # 'Deletion'}
                 observation_source=obs_source
-
             )
             foundGenomicVariants.append(genomic_variant)
             found_genomic_variants += 1
