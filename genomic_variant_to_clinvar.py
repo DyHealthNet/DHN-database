@@ -81,7 +81,7 @@ def read_variant_meta_file(variants_meta_path: str):
             cohort_id=row['rsid'],
             display_name =row['rsid'],
             description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
-
+            xrefs=f"rsid.{row['rsid']}",
         )
         variantSet.add(newVariant)
         if DEBUG:
