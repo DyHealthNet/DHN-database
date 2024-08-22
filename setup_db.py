@@ -757,7 +757,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    # delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()
@@ -777,8 +777,7 @@ if __name__ == '__main__':
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
-    # add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
-    """
+    add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
@@ -792,19 +791,18 @@ if __name__ == '__main__':
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    """
     add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
-    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    # calculateCoverage(db_session)
+    calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     # countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
-    # add_views(db_session)
-    # add_indexes(db_session, engine, metadata)
+    add_views(db_session)
+    add_indexes(db_session, engine, metadata)
     db_session.close()
     print("Database setup complete.")
