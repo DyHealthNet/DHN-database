@@ -795,13 +795,15 @@ if __name__ == '__main__':
     # add the edges calculated from the available data
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
-    # countEntries(db_session, metadata)
+    countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
     add_views(db_session)
     add_indexes(db_session, engine, metadata)
+
+    # calculate coverage
+    calculateCoverage(db_session)
     db_session.close()
     print("Database setup complete.")
