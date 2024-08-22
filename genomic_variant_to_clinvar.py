@@ -24,26 +24,38 @@ def read_rsid_chris(variantDataPath: str):
     # check how many nans in the uniprot ocl
     print("Number of nans in variant col:", df['rsid'].isna().sum())
     df['rsid'] = df['rsid'].fillna('')
-    rsids = df['rsid'].unique().tolist()
-    return rsids
+
+    rs_id_list = df[['rsid','pos','ref','alt']]
+    return rs_id_list
 
 
-def get_genomic_variant_nodes(clinvarIds, obs_source):
-    print("Genomic_variant IDs:", len(clinvarIds))
+def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
+    print("Genomic_variant IDs:", len(rsIdfromCohortDataframe))
     # clinvarIds = ['clinvar.' + str(item) for item in clinvarIds]
-    noIds = len(clinvarIds)
+    noIds = len(rsIdfromCohortDataframe)
+    unique_rsIdList = rsIdfromCohortDataframe['rsid'].tolist()
+    result = []
+    cohortEntriesDicts = rsIdfromCohortDataframe.to_dict()
+    #rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIdfromCohortList['rsid']}
+
     foundGenomicVariants = []
     found_genomic_variants = 0
     for node in iter_nodes('genomic_variant'):
         if (found_genomic_variants >= noIds):
             break
-        primary_domain_id = node['domainIds']
-        if len(primary_domain_id) > 1:
-            primary_domain_id = node['domainIds'][1]
+        rs_id_genomic_variant = node['domainIds']
+        if len(rs_id_genomic_variant) > 1:
+            rs_id_genomic_variant = node['domainIds'][1].replace('dbsnp.','rs')
         else:
             continue
+        alternate_sequence = node.get('alternativeSequence')
+        lookup = rsIdfromCohortDataframe[(rsIdfromCohortDataframe['rsid'] == rs_id_genomic_variant ) & (rsIdfromCohortDataframe['alt'] == alternate_sequence)]
+        lookupboolean = lookup.empty
+        test =2
+        # subset auf das dataframe auf spalte rsid mit db alt
+        if (not lookupboolean):
 
-        if (primary_domain_id in clinvarIds):
+            ##add check if alt and ref is fitting aswell
             genomic_variant = Genomic_variant(
                 clinvar_id=str(node.get('primaryDomainId')),
                 # Column(String, primary_key=True)  # clinvar.17735
@@ -52,7 +64,7 @@ def get_genomic_variant_nodes(clinvarIds, obs_source):
                 dataSources=str(node.get('dataSources')),  # Column(String)  # ['clinvar'],
                 xrefs=str(node.get('domainIds')),  # Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
                 position=str(node.get('position')),  # Column(String)  # 83614,
-                referenceSequence=str(node.get('referenceSequence')),  # Column(String)  # 'TC',
+                referenceSequence=str(node.get('referenceSequence')),  # Column(String)  # 'C',
                 type=str(node.get('type')),  # Column(String)  # 'GenomicVariant'
                 variantType=str(node.get('variantType')),  # Column(String)  # 'Deletion'}
                 observation_source=obs_source
@@ -67,25 +79,41 @@ def get_genomic_variant_nodes(clinvarIds, obs_source):
     return foundGenomicVariants
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def read_variant_meta_file(variants_meta_path: str):
     """
     reads Protein IDs from Chris dataset
     """
     # print(head(gwas_stats_df))
 
-    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str).drop(columns=['Unnamed: 0'])
+    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
     print("Iterating through gwas file")
     variantSet = set()
     for index, row in variants_meta_df.iterrows():
         newVariant = CohortGenomicVariant(
-            cohort_id=row['rsid'],
+           # cohort_id=row['rsid'] + str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
+            cohort_id=str(row['chrom'] + ":" +  row['pos'] + ":" + row['ref'] + ">" + row['alt']),
             display_name =row['rsid'],
-            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ":" + row['alt']),
+            description=str(row['chrom'] + ":" + row['pos'] + ":" + row['ref'] + ">" + row['alt']),
 
         )
         variantSet.add(newVariant)
         if DEBUG:
-            if len(variantSet) > 10000:
+            if len(variantSet) > 1000:
                 break
     return variantSet
 
@@ -110,7 +138,7 @@ def read_variant_gwas_file(gwas_stats_path: str):
         if (type == "pheno"):
             newEffectVariantPhenotype = EffectVariantPhenotype(
                 phenotype_id=row['label2'],
-                variant_id=row['label1'],
+                variant_id=row['label1'].replace("chr",""),
                 p_value=float(row['pval']),
                 effect_size=float(row['effsize']),
                 effect_size_type=row['effsize_type'],
@@ -122,7 +150,7 @@ def read_variant_gwas_file(gwas_stats_path: str):
         if (type == "prot"):
             newEffectVariantProtein = EffectVariantProtein(
                 protein_id=row['label2'],
-                variant_id=row['label1'],
+                variant_id=row['label1'].replace("chr",""),
                 p_value=float(row['pval']),
                 effect_size=float(row['effsize']),
                 effect_size_type = row['effsize_type'],
@@ -133,7 +161,7 @@ def read_variant_gwas_file(gwas_stats_path: str):
         if (type == "metab"):
             newEffectVariantMetabolite = EffectVariantMetabolite(
                 metabolite_id=row['label2'],
-                variant_id=row['label1'],
+                variant_id=row['label1'].replace("chr",""),
                 p_value=float(row['pval']),
                 effect_size=float(row['effsize']),
                 effect_size_type=row['effsize_type'],

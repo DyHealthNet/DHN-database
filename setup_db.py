@@ -479,7 +479,7 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
     # remove all cohort genomic variants with the same cohort_id
     all_ids = [x.cohort_id for x in cohort_variants]
     cohort_variants = {x for x in cohort_variants if all_ids.count(x.cohort_id) == 1}
-    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
+    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=False)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
     effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
@@ -510,19 +510,19 @@ def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_p
 
 def get_cohort_references_variant(session, obs_source):
     genomic_variants = session.query(Genomic_variant).all()
-    # If you want to do something with these objects, you can loop through them
     newCohortReferencesSet = set()
-    existing_rsids_ids = {str(row[0]) for row in session.query(CohortGenomicVariant.cohort_id).all()}
-    existing_clin_var_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
-
+    #existing_rsids_display = {str(row[0]) for row in session.query(CohortGenomicVariant.display_name).all()}
+    existing_cohort_id = {x[0] for x in session.query(CohortGenomicVariant.cohort_id).all()}
+    #existing_clinvar_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
     for variant in genomic_variants:
-        variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'",
-                                                                                                      "").split()
+        variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'","").split()
+        ref_cohort_id =str(variant.chromosome + ":" + variant.position + ":" + variant.referenceSequence + ">" + variant.alternativeSequence)
         dbsnp_id = next((id.replace("dbsnp.", "rs") for id in variant_domain_ids if "dbsnp." in id), None)
-        clinvar_id = next((id for id in variant_domain_ids if "clinvar." in id), None)
-        if (dbsnp_id in existing_rsids_ids and clinvar_id in existing_clin_var_ids):
+        clinvar_id = variant.clinvar_id
+        #next((id for id in variant_domain_ids if "clinvar." in id), None)
+        if (ref_cohort_id in existing_cohort_id):
             newCohortReferencesVariant = CohortReferencesVariant(
-                cohort_id=dbsnp_id,
+                cohort_id=ref_cohort_id,
                 clinvar_id=clinvar_id
             )
             newCohortReferencesSet.add(newCohortReferencesVariant)
@@ -532,8 +532,7 @@ def get_cohort_references_variant(session, obs_source):
 
 def add_genomic_variants_neddrex(session, genomic_variant_meta_path, obs_source):
     print("Adding genomic variants from NeDRex")
-    rsIDset = read_rsid_chris(genomic_variant_meta_path)
-    rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIDset}
+    rs_id_list = read_rsid_chris(genomic_variant_meta_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
@@ -681,10 +680,16 @@ def calculateCoverage(session):
     except:
         protein_coverage = "NA"
     # phenotypes
-    unique_cohort_ids_phenotype = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
+    unique_cohort_ids_phenotype_hpo = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
+    unique_cohort_ids_phenotype_mondo = session.query(distinct(CohortReferencesDisease.cohort_id)).count()
+
+    unique_mondo_ids_count = session.query(distinct(CohortReferencesDisease.cohort_id)).count()
     unique_hpo_ids_count = session.query(distinct(CohortPhenotype.cohort_id)).count()
+    unique_hpo_mondo_ids_count = unique_cohort_ids_phenotype_hpo + unique_cohort_ids_phenotype_mondo
     try:
-        phenotype_coverage = round(unique_cohort_ids_phenotype / unique_hpo_ids_count, 3)
+        phenotype_coverage_hpo = round(unique_cohort_ids_phenotype_hpo / unique_hpo_ids_count, 3)
+        phenotype_coverage_mondo = round(unique_cohort_ids_phenotype_mondo / unique_hpo_ids_count, 3)
+        phenotype_coverage_mondo_hpo = round(unique_hpo_mondo_ids_count / unique_hpo_mondo_ids_count,3)
     except:
         phenotype_coverage = "NA"
     # genomic_variant
@@ -705,9 +710,12 @@ def calculateCoverage(session):
         ("Unique uniprot_id count", unique_uniprot_ids_count),
         ("protein_coverage", protein_coverage),
 
-        ("Unique phenotype_cohort count", unique_cohort_ids_phenotype),
+        ("Unique phenotype_cohort_hpo count", unique_cohort_ids_phenotype_hpo),
         ("Unique hpo_id count", unique_hpo_ids_count),
-        ("phenotype_coverage", phenotype_coverage),
+        ("phenotype_coverage_hpo", phenotype_coverage_hpo),
+        ("Unique mondo_id count", unique_mondo_ids_count),
+        ("phenotype_coverage_mondo", phenotype_coverage_mondo),
+        ("phenotype_coverage_total", phenotype_coverage_mondo_hpo),
 
         ("Unique genomic variants_cohort_id count", unique_cohort_ids_genomic_variant),
         ("Unique clinvar_id count ", unique_clinvar_ids_count),
@@ -740,7 +748,7 @@ if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    delete_tables(db_session)
+    #delete_tables(db_session)
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()
@@ -761,6 +769,7 @@ if __name__ == '__main__':
         raise ValueError("Some of the provided paths do not exist.")
 
     add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+    """
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
@@ -770,14 +779,15 @@ if __name__ == '__main__':
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
 
     # add cohort phenotype data as the mapping is incomplete
-
+    
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    """
     add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     calculateCoverage(db_session)
     # count the number of entries in the database
