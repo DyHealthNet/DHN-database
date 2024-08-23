@@ -22,8 +22,8 @@ def add_views(session):
         SELECT 'cohort_phenotype' AS source_table, cohort_id AS id, description, 
                 display_name, xrefs FROM cohort_phenotype
         UNION ALL
-        SELECT 'cohort_variant' AS source_table, cohort_id AS id, 'incomplete' as description, 
-                'incomplete' as display_name, 'incomplete' as xrefs FROM cohort_variant;
+        SELECT 'cohort_variant' AS source_table, cohort_id AS id, description, 
+                display_name, xrefs FROM cohort_variant;
         """
         session.execute(text(view_sql))
         print("Created view view_description_fts.")
