@@ -33,15 +33,12 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
     print("Genomic_variant IDs:", len(rsIdfromCohortDataframe))
     # clinvarIds = ['clinvar.' + str(item) for item in clinvarIds]
     noIds = len(rsIdfromCohortDataframe)
-    unique_rsIdList = rsIdfromCohortDataframe['rsid'].tolist()
-    result = []
-    cohortEntriesDicts = rsIdfromCohortDataframe.to_dict()
-    #rs_id_list = {id_.replace('rs', 'dbsnp.') for id_ in rsIdfromCohortList['rsid']}
+    rsIds_with_alt_seq = set(zip(rsIdfromCohortDataframe['rsid'], rsIdfromCohortDataframe['alt']))
 
     foundGenomicVariants = []
     found_genomic_variants = 0
     for node in iter_nodes('genomic_variant'):
-        if (found_genomic_variants >= noIds):
+        if found_genomic_variants >= noIds:
             break
         rs_id_genomic_variant = node['domainIds']
         if len(rs_id_genomic_variant) > 1:
@@ -49,11 +46,8 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
         else:
             continue
         alternate_sequence = node.get('alternativeSequence')
-        lookup = rsIdfromCohortDataframe[(rsIdfromCohortDataframe['rsid'] == rs_id_genomic_variant ) & (rsIdfromCohortDataframe['alt'] == alternate_sequence)]
-        lookupboolean = lookup.empty
         test =2
-        # subset auf das dataframe auf spalte rsid mit db alt
-        if (not lookupboolean):
+        if (rs_id_genomic_variant, alternate_sequence) in rsIds_with_alt_seq:
 
             ##add check if alt and ref is fitting aswell
             genomic_variant = Genomic_variant(
@@ -68,7 +62,6 @@ def get_genomic_variant_nodes(rsIdfromCohortDataframe, obs_source):
                 type=str(node.get('type')),  # Column(String)  # 'GenomicVariant'
                 variantType=str(node.get('variantType')),  # Column(String)  # 'Deletion'}
                 observation_source=obs_source
-
             )
             foundGenomicVariants.append(genomic_variant)
             found_genomic_variants += 1
