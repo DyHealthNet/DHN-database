@@ -668,57 +668,77 @@ def countEntries(session, metadata):
 
 
 def calculateCoverage(session):
-    # metabolites
+    # metabolites mapped
     unique_cohort_ids_metabolite = session.query(distinct(CohortReferencesMetabolite.cohort_id)).count()
+    # metabolites in cohort
     unique_hmdb_ids_count = session.query(distinct(CohortMetabolite.cohort_id)).count()
     try:
+        # calculate %
         metabolite_coverage = round(unique_cohort_ids_metabolite / unique_hmdb_ids_count, 3)
     except:
         metabolite_coverage = "NA"
-    # proteins
-
+    # proteins mapped
     unique_cohort_ids_protein = session.query(distinct(CohortReferencesProtein.cohort_id)).count()
+    #proteins in cohort
     unique_uniprot_ids_count = session.query(distinct(CohortProtein.cohort_id)).count()
     try:
+        # calculate %
         protein_coverage = round(unique_cohort_ids_protein / unique_uniprot_ids_count, 3)
     except:
         protein_coverage = "NA"
-    # phenotypes
+    # phenotypes are mapped on phenotype and on disorder
+    # phenotypes mapped on Phenotype
     unique_cohort_ids_phenotype_hpo = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
+    # disorder mapped on Phenotype
     unique_cohort_ids_phenotype_mondo = session.query(distinct(CohortReferencesDisease.cohort_id)).count()
-
-    unique_mondo_ids_count = session.query(distinct(CohortReferencesDisease.cohort_id)).count()
+    # total amount of phenotype in cohort
     unique_hpo_ids_count = session.query(distinct(CohortPhenotype.cohort_id)).count()
+    # combined of phenotype + disorder mapped
     unique_hpo_mondo_ids_count = unique_cohort_ids_phenotype_hpo + unique_cohort_ids_phenotype_mondo
     try:
+        #coverage % phenotype on hpo that was in cohort and actually loaded
         phenotype_coverage_hpo = round(unique_cohort_ids_phenotype_hpo / unique_hpo_ids_count, 3)
+        #coverage % phenotype on disorder that was in cohort and actually loaded
         phenotype_coverage_mondo = round(unique_cohort_ids_phenotype_mondo / unique_hpo_ids_count, 3)
-        phenotype_coverage_mondo_hpo = round(unique_hpo_mondo_ids_count / unique_hpo_mondo_ids_count,3)
+        #coverage % combined coverage
+        phenotype_coverage_mondo_hpo = round(unique_hpo_mondo_ids_count / unique_hpo_ids_count,3)
     except:
-        phenotype_coverage = "NA"
-    # genomic_variant
+        phenotype_coverage_hpo = "NA"
+        phenotype_coverage_mondo = "NA"
+        phenotype_coverage_mondo_hpo = "NA"
+
+    # Variants mapped
     unique_cohort_ids_genomic_variant = session.query(distinct(CohortReferencesVariant.cohort_id)).count()
+    # total amount of variants in cohort
     unique_clinvar_ids_count = session.query(distinct(CohortGenomicVariant.cohort_id)).count()
     try:
+        # coverage % variants mapped
         genomic_variant_coverage = round(unique_cohort_ids_genomic_variant / unique_clinvar_ids_count, 3)
+
     except:
         genomic_variant_coverage = "NA"
-
     # Output the results
     coverage = [
         ("Unique metabolite_cohort count", unique_cohort_ids_metabolite),
         ("Unique hmdb_id count", unique_hmdb_ids_count),
         ("metabolite_coverage", metabolite_coverage),
-
         ("Unique protein_cohort count", unique_cohort_ids_protein),
         ("Unique uniprot_id count", unique_uniprot_ids_count),
         ("protein_coverage", protein_coverage),
 
+        #Phenotype in Cohort (hpo)
         ("Unique phenotype_cohort_hpo count", unique_cohort_ids_phenotype_hpo),
+        #Phenotype
         ("Unique hpo_id count", unique_hpo_ids_count),
+        #coverage
         ("phenotype_coverage_hpo", phenotype_coverage_hpo),
-        ("Unique mondo_id count", unique_mondo_ids_count),
+
+        #Disorder in Cohort (mondo)
+        ("Unique mondo_id count", unique_cohort_ids_phenotype_mondo),
+        #coverage
         ("phenotype_coverage_mondo", phenotype_coverage_mondo),
+
+        #Coverage Disorder + Phenotype
         ("phenotype_coverage_total", phenotype_coverage_mondo_hpo),
 
         ("Unique genomic variants_cohort_id count", unique_cohort_ids_genomic_variant),
@@ -788,12 +808,12 @@ if __name__ == '__main__':
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
     """
-    add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+    #add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
     # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
-    # calculateCoverage(db_session)
+    calculateCoverage(db_session)
     # count the number of entries in the database
     metadata.reflect(bind=engine)
     # countEntries(db_session, metadata)
