@@ -283,9 +283,9 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     db_session = Session()
 
-    edges_path = '../data/scores_including_tests.csv'
-    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    protein_data_path = '../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    edges_path = '../../data/scores_including_tests.csv'
+    pheno_data_path = '../../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
+    protein_data_path = '../../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
+    metabo_data_path = '../../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
 
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)

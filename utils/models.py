@@ -93,15 +93,15 @@ class Metabolite(Base):
 
 class Genomic_variant(Base):
     __tablename__ = "genomic_variant"
-    clinvar_id = Column(String, primary_key=True)  # clinvar.17735
-    alternativeSequence = Column(String)  # 'T',
-    chromosome = Column(String)  # 'NW_009646201.1',
-    dataSources = Column(String)  # ['clinvar'],
-    xrefs = Column(String)  # ['clinvar.17735', 'dbsnp.1556058284']
-    position = Column(String)  # 83614,
-    referenceSequence = Column(String)  # 'TC',
-    type = Column(String)  # 'GenomicVariant'
-    variantType = Column(String)  # 'Deletion'}
+    clinvar_id = Column(String, primary_key=True)
+    alternativeSequence = Column(String)
+    chromosome = Column(String)
+    dataSources = Column(String)
+    xrefs = Column(String)
+    position = Column(String)
+    referenceSequence = Column(String)
+    type = Column(String)
+    variantType = Column(String)
     observation_source = Column(String)
 
 
