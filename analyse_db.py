@@ -1,8 +1,7 @@
 #%%
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
 from setup_db import engine
-from models import *
+from utils.models import *
 import inspect
 import sys
 
@@ -47,3 +46,6 @@ for model in all_models:
 
 print(f"Cumulative rows in layer one: {layer_one:,}")
 print(f"Cumulative rows in layer two: {layer_two:,}")
+
+#%%
+# calculate the coverage using

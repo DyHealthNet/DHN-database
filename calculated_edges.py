@@ -7,7 +7,7 @@
 
 import pandas as pd
 
-from models import *
+from utils.models import *
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import sessionmaker
 from settings import *

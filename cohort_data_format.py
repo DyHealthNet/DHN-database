@@ -1,7 +1,6 @@
-from sqlalchemy.orm import DeclarativeBase
-from models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
-                    CohortReferencesMetabolite, CohortReferencesProtein, CohortReferencesPhenotype,
-                    CohortReferencesDisease)
+from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
+                          CohortReferencesMetabolite, CohortReferencesProtein, CohortReferencesPhenotype,
+                          CohortReferencesDisease)
 import pandas as pd
 
 

@@ -1,7 +1,6 @@
 import os.path
 import pandas as pd
 import xml.etree.ElementTree as ET
-from query_nedrex import domain_id_to_mondo, get_disorder_data
 from settings import DEBUG
 
 
@@ -111,5 +110,5 @@ def retrieve_assoc_metabolite_nodes(hmdb_mapping):
 
 
 if __name__ == '__main__':
-    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    hmdb_data_path = '../data/hmdb_metabolites.xml'
+    metabo_data_path = '../../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    hmdb_data_path = '../../data/hmdb_metabolites.xml'

@@ -1,23 +1,23 @@
-import networkx as nx
 from settings import *
-from nedrex.core import iter_nodes, iter_edges, get_node_types
-from collections import Counter
-from testcases import *
 from cohort_data_format import *
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from calculated_edges import add_calculated_edges
-from sqlalchemy import URL, text, Table, MetaData, distinct
-from protein_mapping import read_proteinID_chris, get_protein_nodes
-from genomic_variant_to_clinvar import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, \
+from sqlalchemy import URL, text, MetaData, create_engine
+
+from nodes.variants import add_variant_affects_gene, get_cohort_references_variant
+from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions
+from nodes.variants import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, \
     read_variant_gwas_file
-from metabolite_mapping import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
+from nodes.metabolites import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
-from hpo_mapping import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo
-from query_nedrex import get_needed_snomed_ids, domain_id_to_mondo, get_disorder_data, get_edge_associations, \
-    get_harmonizome_data, get_gene_data, get_phenotype_data
-from database_views import add_views, add_indexes
-import csv
+from nodes.phenotypes import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo, \
+    retrieve_disorder_data, retrieve_phenotype_data, get_additional_diseases, get_needed_snomed_ids
+
+from utils.models import *
+from utils.query_nedrex import domain_id_to_mondo, get_disorder_data, get_edge_associations, get_gene_data, \
+    get_phenotype_data
+from utils.database_views import add_views, add_indexes
 
 url = url_object = URL.create(
     "postgresql",
@@ -46,145 +46,6 @@ def delete_tables(session):
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
     session.commit()
     Base.metadata.drop_all(engine, checkfirst=True)
-
-
-def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[list[str], list[str]] | tuple[None, None]:
-    """
-    Retrieves the genes associated with a mondo id from the association graph
-    :param mondo_id: A mondo id, can be None
-    :param assoc_graph: The association graph from NEDRex
-    :return: genes associated with the mondo id, source of the data, harmonizome data if not in the association graph
-    """
-    if mondo_id is None:
-        return None, None
-    if mondo_id in assoc_graph:
-        genes = []
-        sources = []
-        for edge in assoc_graph.edges(mondo_id, data=True):
-            genes.append(edge[1])
-            sources.append(edge[2]['source'][0])
-    else:
-        harm = get_harmonizome_data(mondo_id)
-        if harm is None:
-            return None, None
-        genes = []
-        sources = []
-        for key, value in harm.items():
-            genes.extend(value)
-            sources.extend([key] * len(value))
-    return genes, sources
-
-
-def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
-                           xrefs: dict, display_names: dict, gene_info: dict, assoc_graph: nx.Graph,
-                           obs_source: str = None) -> tuple[set, set, set, int]:
-    """
-    Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
-    :param display_names: Display names for the mondo ids
-    :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
-    :param xrefs: cross references for the mondo ids to other databases
-    :param descriptions: descriptions for the mondo ids
-    :param needed_snomed: snomed ids in the dataset
-    :param snomed_to_mondo: map from snomed to mondo ids from nedrex
-    :param assoc_graph: association graph from nedrex of mondo ids to genes
-    :param obs_source: Describes the source of observations - e.g. CHRIS
-    :return: list of genes to add, list of disorders to add, list of gene associations to add,
-    number of snomed ids found
-    """
-    gene_associations = set()
-    genes_to_add = set()
-    disorders = set()
-    found = 0
-    for snomed in needed_snomed:
-        # check if ; in snomed id and if so, do this for all ids
-        snomed_ids = str(snomed).split(';')
-        for snomed_id in snomed_ids:
-            mondo_id = snomed_to_mondo.get(snomed_id)
-            xref = xrefs.get(mondo_id, None)
-            description = descriptions.get(mondo_id, None)
-            display_name = display_names.get(mondo_id, None)
-            genes, sources = mondo_in_association_graph(mondo_id, assoc_graph)
-            if genes is None:
-                continue
-            # add genes to set
-            for gene in genes:
-                gene_data = gene_info.get(gene, None)
-                if gene_data is None:
-                    new_gene = Gene(entrez_id=gene, observation_source='external')
-                    genes_to_add.add(new_gene)
-                    continue
-                new_gene = Gene(entrez_id=gene_data['primaryDomainId'],
-                                display_name=gene_data['displayName'],
-                                description=gene_data['description'],
-                                synonyms=gene_data['synonyms'],
-                                chromosome=gene_data['chromosome'],
-                                observation_source='external')
-                genes_to_add.add(new_gene)
-
-            disorders.add(
-                Disorder(mondo_id=mondo_id,
-                         display_name=display_name,
-                         xrefs=xref,
-                         description=description,
-                         observation_source=obs_source))
-            # add gene associations to set for each source
-            gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
-                                      for gene, source in zip(genes, sources)])
-            found += 1
-        continue
-    return genes_to_add, disorders, gene_associations, found
-
-
-def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_source: str = None) \
-        -> tuple[set, set, set, int]:
-    """
-    Retrieve the phenotype data for the needed snomed ids
-    # HPO conversion: Pathway
-    # HPO data (HPO_ID ----> SNOMED_ID) - look for needed SNOMED IDs
-    # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
-    #
-
-    :param obs_source: Describes the source of observations - e.g. CHRIS
-    :param additional_data: dictionary with additional data for the hpo ids, must be a dictionary with hpo ids as keys
-    :param available_ids: dictionary with snomed ids as keys and hpo ids as values
-    :return: dictionary with the phenotype data
-    """
-    found = 0
-    genes_to_add = set()
-    phenotypes = set()
-    disorder_associations = set()
-
-    available_snomed_ids = available_ids
-    # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
-
-    print(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
-
-    # get edge associations for disorder_has_phenotype
-    assoc_graph = get_edge_associations(set(available_snomed_ids.values()), edge_type='disorder_has_phenotype')
-
-    # find the genes that are associated with the mondo ids
-    for snomed_id, hpo_id in available_snomed_ids.items():
-        snomed_id = f"snomedct.{snomed_id}"
-        if additional_data.get(hpo_id, None) is None:
-            continue
-        phenotype_data = additional_data[hpo_id]
-        phenotypes.add(Phenotype(hpo_id=hpo_id,
-                                 xrefs=set(phenotype_data['domainIds'] + [snomed_id]),
-                                 description=phenotype_data['description'],
-                                 synonyms=phenotype_data['synonyms'],
-                                 display_name=phenotype_data['displayName'],
-                                 observation_source=obs_source))
-        if hpo_id not in assoc_graph:
-            continue
-        # get the disorder ids associated with the hpo id
-        for edge in assoc_graph.edges(hpo_id, data=True):
-            disorder = edge[1]
-            source = edge[2]['source'][0]
-            new_assoc = DisorderAssocPhenotype(mondo_id=disorder, hpo_id=hpo_id, edge_source=source)
-            disorder_associations.add(new_assoc)
-
-        found += 1
-    return genes_to_add, phenotypes, disorder_associations, found
 
 
 def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: list, bulk: bool = False):
@@ -364,49 +225,22 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_protein_data(session, proteinData_path=None, obs_source=None, missing_ids=None):
+def add_protein_data(session, protein_path=None, obs_source=None, missing_ids=None):
     if missing_ids is None:
-        proteinIds = read_proteinID_chris(proteinData_path)
+        protein_ids = read_protein_id_chris(protein_path)
     else:
-        proteinIds = missing_ids
-    proteinNodes, found_proteins = get_protein_nodes(proteinIds, obs_source)
-    needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in proteinIds}
+        protein_ids = missing_ids
+    protein_nodes, found_proteins = get_protein_nodes(protein_ids, obs_source)
+    needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in protein_ids}
     print(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
           f"{len(needed_ids - found_proteins) - 5} more")
 
-    available_proteins = {x.uniprot_id for x in proteinNodes}
-    print(f"Got {len(proteinNodes)} protein nodes")
-    proteinInteractions = get_protein_interactions(available_proteins)
-    add_items(session, proteinNodes, Protein, ['uniprot_id'])
-    add_items(session, proteinInteractions, ProteinAssocProtein, ['id'])
+    available_proteins = {x.uniprot_id for x in protein_nodes}
+    print(f"Got {len(protein_nodes)} protein nodes")
+    protein_interactions = get_protein_interactions(available_proteins)
+    add_items(session, protein_nodes, Protein, ['uniprot_id'])
+    add_items(session, protein_interactions, ProteinAssocProtein, ['id'])
     session.commit()
-
-
-def get_protein_interactions(proteinIds):
-    # prefixed_proteinIds = {f"uniprot.{entry}" for entry in proteinIds}
-    # retrieve_interacting_proteins_neo4j(proteinIds)
-    assoc_graph = get_edge_associations(proteinIds, edge_type='protein_interacts_with_protein',
-                                        direction='undirected')
-    proteinInteractions = []
-    for edge in assoc_graph.edges():
-        uniprot_id_memberOne = edge[0]
-        uniprot_id_memberTwo = edge[1]
-        if (uniprot_id_memberTwo in proteinIds and uniprot_id_memberOne in proteinIds):
-            proteinInteractions.append(ProteinAssocProtein(uniprot_id_1=uniprot_id_memberOne,
-                                                           uniprot_id_2=uniprot_id_memberTwo))
-    return proteinInteractions
-
-
-def get_additional_diseases(session, obs_source: str = None):
-    # I know this defeats the purpose of SQLAlchemy but I could not find a way to do this with the ORM
-    sql_string = f"""SELECT xrefs
-                    FROM disorder
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM unnest(xrefs) AS xref
-                        WHERE xref LIKE 'omim.%'
-                    ) AND observation_source = '{obs_source}';"""
-    return {x for x in session.execute(text(sql_string)).fetchall() for x in x[0] if x.startswith('omim.')}
 
 
 def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs_source: str = None):
@@ -476,166 +310,66 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     session.commit()
 
 
-def add_cohort_genomic_variants(session, genomic_variant_meta_path, gwas_stats_path, obs_source):
-    gwas_stats_path = gwas_stats_path
-    cohort_variants = read_variant_meta_file(genomic_variant_meta_path)
-    # # remove all cohort genomic variants with the same cohort_id
+def add_cohort_genomic_variants(session, variant_meta_path, gwas_stats_path, obs_source):
+    cohort_variants = read_variant_meta_file(variant_meta_path)
+    # remove all cohort genomic variants with the same cohort_id
     add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
-    effectVariantProteinSet, effectVariantMetaboliteSet, effectVariantPhenotypeSet = read_variant_gwas_file(
+    effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
         gwas_stats_path)
 
-    rsids_ids = {str(row[0]) for row in db_session.query(CohortGenomicVariant.cohort_id).all()}
-    phenotype_ids = {str(row[0]) for row in db_session.query(CohortPhenotype.cohort_id).all()}
-    protein_ids = {str(row[0]) for row in db_session.query(CohortProtein.cohort_id).all()}
-    metabolite_ids = {str(row[0]) for row in db_session.query(CohortMetabolite.cohort_id).all()}
-    effectVariantProteinSet_filtered = {obj for obj in effectVariantProteinSet if
-                                        obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
-    effectVariantMetaboliteSet_filtered = {obj for obj in effectVariantMetaboliteSet if
-                                           obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
-    effectVariantPhenotypeSet_filtered = {obj for obj in effectVariantPhenotypeSet if
-                                          obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
-    add_items(session, effectVariantMetaboliteSet_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
+    def get_cohort_ids(model):
+        return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
+
+    rsids_ids = get_cohort_ids(CohortGenomicVariant)
+    protein_ids = get_cohort_ids(CohortProtein)
+    metabolite_ids = get_cohort_ids(CohortMetabolite)
+    phenotype_ids = get_cohort_ids(CohortPhenotype)
+
+    variant_protein_filtered = {obj for obj in effect_variant_protein_set if
+                                obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+    variant_metabolite_filtered = {obj for obj in effect_variant_metabolite_set if
+                                   obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+    variant_phenotype_filtered = {obj for obj in effect_variant_phenotype_set if
+                                  obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+
+    add_items(session, variant_metabolite_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
               bulk=True)
-    add_items(session, effectVariantPhenotypeSet_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
+    add_items(session, variant_phenotype_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
               bulk=True)
-    add_items(session, effectVariantProteinSet_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
+    add_items(session, variant_protein_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
     session.commit()
-    print(f"Added {len(effectVariantProteinSet_filtered)} variant-protein associations, "
-          f"{len(effectVariantMetaboliteSet_filtered)} variant-metabolite associations, and "
-          f"{len(effectVariantPhenotypeSet_filtered)} variant-phenotype associations")
+
+    print(f"Added {len(variant_protein_filtered)} variant-protein associations, "
+          f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
+          f"{len(variant_phenotype_filtered)} variant-phenotype associations")
+
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
               filter_args=["cohort_id", "clinvar_id"])
     session.commit()
 
 
-def get_cohort_references_variant(session, obs_source):
-    genomic_variants = session.query(Genomic_variant).all()
-    newCohortReferencesSet = set()
-    # existing_rsids_display = {str(row[0]) for row in session.query(CohortGenomicVariant.display_name).all()}
-    query_result = session.query(CohortGenomicVariant).all()
-    existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
-                          for genomic_variant in query_result}
-    desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
-                for genomic_variant in query_result}
-    # existing_clinvar_ids = {str(row[0]) for row in session.query(Genomic_variant.clinvar_id).all()}
-    for variant in genomic_variants:
-        variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'", "").split()
-        dbsnp_id = next((id.replace("dbsnp.", "rs") for id in variant_domain_ids if "dbsnp." in id), None)
-        clinvar_id = variant.clinvar_id
-        alt_seq = variant.alternativeSequence
-        # next((id for id in variant_domain_ids if "clinvar." in id), None)
-        if ((dbsnp_id, alt_seq) in existing_cohort_id):
-            cohort_id = desc_map[f"{dbsnp_id}{alt_seq}"]
-            newCohortReferencesVariant = CohortReferencesVariant(
-                cohort_id=cohort_id,
-                clinvar_id=clinvar_id
-            )
-            newCohortReferencesSet.add(newCohortReferencesVariant)
-
-    return (newCohortReferencesSet)
-
-
-def add_genomic_variants_neddrex(session, genomic_variant_meta_path, obs_source):
+def add_genomic_variant_data(session, genomic_variant_meta_path, obs_source):
     print("Adding genomic variants from NeDRex")
     rs_id_list = read_rsid_chris(genomic_variant_meta_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
     print(f"Added {len(variants_to_add)} genomic variants")
+
     genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
-    add_genomic_variant_edge_variant_affects_gene(db_session, genomic_variant_ids, obs_source=obs_source)
-    session.commit()
-    print("Added variant affects gene edges")
+    genes_to_add, variant_affects_gene_to_add = add_variant_affects_gene(genomic_variant_ids, obs_source=obs_source)
 
-
-def add_genomic_variant_edge_variant_affects_gene(session, clinvarIds, obs_source):
-    variant_affects_gene_graph = get_edge_associations(node_ids=clinvarIds, edge_type='variant_affects_gene',
-                                                       direction='directed')
-    variant_affects_gene_dict = {}
-    id_list_total = []  # to check if is in database
-    variant_edge_list = []
-    variant_affects_gene_to_add = set()
-    for edge in variant_affects_gene_graph.edges(data=True):
-        variant_affects_gene_dict[edge[0]] = edge[1]
-        variant_edge_list.append(edge)
-        sourceDomainId = edge[0]
-        targedDomainId = edge[1]
-        id_list_total.append(sourceDomainId)
-        id_list_total.append(
-            targedDomainId)  # because graph is directed either first or second entry contains the entrez id
-
-        if sourceDomainId.startswith("entrez."):
-            entrez_id = sourceDomainId
-            variant = targedDomainId
-        if targedDomainId.startswith("entrez."):
-            entrez_id = targedDomainId
-            variant = sourceDomainId
-        variant_affects_gene_edge = Variant_affects_gene(clinvar_id=variant,
-                                                         entrez_id=entrez_id)
-        variant_affects_gene_to_add.add(variant_affects_gene_edge)
-    entrez_ids = {id for id in id_list_total if id.startswith("entrez.")}
-    genomic_variant_node_generator = iter_nodes('genomic_variant')
-    genomic_variant_node_generator = iter_nodes('gene')
-    genes_to_add = set()
-    for node in genomic_variant_node_generator:
-        if (node['primaryDomainId'] in id_list_total):
-            new_gene = Gene(entrez_id=node['primaryDomainId'],
-                            display_name=node['displayName'],
-                            description=node['description'],
-                            synonyms=node['synonyms'],
-                            chromosome=node['chromosome'],
-                            observation_source='external')
-            genes_to_add.add(new_gene)
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     session.commit()
 
     add_items(session, variant_affects_gene_to_add, Variant_affects_gene,
               filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
-
-    # stmt = select([genomic_variants.c.id]).where(genomic_variants.c.id == id_to_check)
-    # result = db_session.execute(stmt).first()
-    return None
-
-
-def add_genomic_variants_linking_from_gene(session, entrez_ids: set[str] = None, observation_source: str = None):
-    variant_affects_gene_graph = get_edge_associations(node_ids=entrez_ids, edge_type='variant_affects_gene',
-                                                       direction='directed')  # Graph with 1511628 nodes and 1539719 edges
-    print(f"Got {len(variant_affects_gene_graph)} edge associations for variant_affects_gene.")
-    variant_affects_gene_dict = {}
-    clinvar_ids = set()
-    for edge in variant_affects_gene_graph.edges(data=True):
-        clinvar_ids.add(edge[0])
-        variant_affects_gene_dict[edge[0]] = edge[1]
-
-    pattern = r'^[^.]*\.'
-    variants_to_add = []
-    genomic_variant_node_generator = iter_nodes('genomic_variant')
-    for node in genomic_variant_node_generator:
-        if node['primaryDomainId'] in clinvar_ids:
-            newVariant = Genomic_variant(clinvar_id=node['primaryDomainId'],  # linvar.17735
-                                         alternativeSequence=node['alternativeSequence'],  # 'T',
-                                         chromosome=node['chromosome'],  # 'NW_009646201.1',
-                                         dataSources=node['dataSources'],  # ['clinvar'],
-                                         xrefs=node['domainIds'],  # ['clinvar.17735', 'dbsnp.1556058284']
-                                         position=node['position'],  # 83614,
-                                         referenceSequence=node['referenceSequence'],  # 'TC',
-                                         type=node['type'],  # 'GenomicVariant'
-                                         variantType=node['variantType'])  # 'Deletion'})
-            variants_to_add.append(newVariant)
-
-    add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
-    variant_affects_gene_to_add = []
-    genes = []
-    available_variants = {variant.clinvar_id for variant in variants_to_add}
-    for variant, gene in variant_affects_gene_dict.items():
-        if (variant in available_variants and gene in entrez_ids):
-            variant_affects_gene_to_add.append(Variant_affects_gene(clinvar_id=variant, entrez_id=gene))
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
+    print("Added variant affects gene edges")
 
 
 def add_missing(session, data, node_type):
@@ -661,125 +395,12 @@ def add_missing(session, data, node_type):
     valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
 
-def countEntries(session, metadata):
-    table_counts = {}
-    # Iterate over each table in the metadata
-    for table_name in metadata.tables:
-        table = Table(table_name, metadata, autoload_with=engine)
-        count = session.query(table).count()
-        table_counts[table_name] = count
-    for table_name, count in table_counts.items():
-        print(f"Table {table_name} has {count} rows.")
-    print("Total number of rows in the database: ", sum(table_counts.values()))
-
-
-def calculateCoverage(session):
-    # metabolites mapped
-    unique_cohort_ids_metabolite = session.query(distinct(CohortReferencesMetabolite.cohort_id)).count()
-    # metabolites in cohort
-    unique_hmdb_ids_count = session.query(distinct(CohortMetabolite.cohort_id)).count()
-    try:
-        # calculate %
-        metabolite_coverage = round(unique_cohort_ids_metabolite / unique_hmdb_ids_count, 3)
-    except:
-        metabolite_coverage = "NA"
-    # proteins mapped
-    unique_cohort_ids_protein = session.query(distinct(CohortReferencesProtein.cohort_id)).count()
-    #proteins in cohort
-    unique_uniprot_ids_count = session.query(distinct(CohortProtein.cohort_id)).count()
-    try:
-        # calculate %
-        protein_coverage = round(unique_cohort_ids_protein / unique_uniprot_ids_count, 3)
-    except:
-        protein_coverage = "NA"
-    # phenotypes are mapped on phenotype and on disorder
-    # phenotypes mapped on Phenotype
-    unique_cohort_ids_phenotype_hpo = session.query(distinct(CohortReferencesPhenotype.cohort_id)).count()
-    # disorder mapped on Phenotype
-    unique_cohort_ids_phenotype_mondo = session.query(distinct(CohortReferencesDisease.cohort_id)).count()
-    # total amount of phenotype in cohort
-    unique_hpo_ids_count = session.query(distinct(CohortPhenotype.cohort_id)).count()
-    # combined of phenotype + disorder mapped
-    unique_hpo_mondo_ids_count = unique_cohort_ids_phenotype_hpo + unique_cohort_ids_phenotype_mondo
-    try:
-        #coverage % phenotype on hpo that was in cohort and actually loaded
-        phenotype_coverage_hpo = round(unique_cohort_ids_phenotype_hpo / unique_hpo_ids_count, 3)
-        #coverage % phenotype on disorder that was in cohort and actually loaded
-        phenotype_coverage_mondo = round(unique_cohort_ids_phenotype_mondo / unique_hpo_ids_count, 3)
-        phenotype_coverage_mondo_hpo = round(unique_hpo_mondo_ids_count / unique_hpo_mondo_ids_count, 3)
-        #coverage % combined coverage
-        phenotype_coverage_mondo_hpo = round(unique_hpo_mondo_ids_count / unique_hpo_ids_count,3)
-    except:
-        phenotype_coverage_hpo = "NA"
-        phenotype_coverage_mondo = "NA"
-        phenotype_coverage_mondo_hpo = "NA"
-
-    # Variants mapped
-    unique_cohort_ids_genomic_variant = session.query(distinct(CohortReferencesVariant.cohort_id)).count()
-    # total amount of variants in cohort
-    unique_clinvar_ids_count = session.query(distinct(CohortGenomicVariant.cohort_id)).count()
-    try:
-        # coverage % variants mapped
-        genomic_variant_coverage = round(unique_cohort_ids_genomic_variant / unique_clinvar_ids_count, 3)
-
-    except:
-        genomic_variant_coverage = "NA"
-    # Output the results
-    coverage = [
-        ("Unique metabolite_cohort count", unique_cohort_ids_metabolite),
-        ("Unique hmdb_id count", unique_hmdb_ids_count),
-        ("metabolite_coverage", metabolite_coverage),
-        ("Unique protein_cohort count", unique_cohort_ids_protein),
-        ("Unique uniprot_id count", unique_uniprot_ids_count),
-        ("protein_coverage", protein_coverage),
-
-        #Phenotype in Cohort (hpo)
-        ("Unique phenotype_cohort_hpo count", unique_cohort_ids_phenotype_hpo),
-        #Phenotype
-        ("Unique hpo_id count", unique_hpo_ids_count),
-        #coverage
-        ("phenotype_coverage_hpo", phenotype_coverage_hpo),
-
-        #Disorder in Cohort (mondo)
-        ("Unique mondo_id count", unique_cohort_ids_phenotype_mondo),
-        #coverage
-        ("phenotype_coverage_mondo", phenotype_coverage_mondo),
-
-        #Coverage Disorder + Phenotype
-        ("phenotype_coverage_total", phenotype_coverage_mondo_hpo),
-
-        ("Unique genomic variants_cohort_id count", unique_cohort_ids_genomic_variant),
-        ("Unique clinvar_id count ", unique_clinvar_ids_count),
-        ("genomic_variants", genomic_variant_coverage)
-    ]
-    coveragefilename = '../data/DyHealthNet/coverage_summary.csv'
-    if not os.path.exists(os.path.dirname(coveragefilename)):
-        os.makedirs(os.path.dirname(coveragefilename))
-    with open(coveragefilename, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        # Writing the header
-        writer.writerow(["ValueName", "Value"])
-        # Writing the data
-        writer.writerows(coverage)
-
-    print(f"Data successfully written to {coveragefilename}")
-    print(coverage)
-
-
-def testingSetup(session):
-    protein = test_protein(5)
-    gene = test_gene()
-    genomicVariant = test_variant()
-    interactions = test_proteinAssocProtein(5)
-    test = 2
-
-
 if __name__ == '__main__':
     # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
-    #delete_tables(db_session)
+    delete_tables(db_session)
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()
@@ -789,46 +410,41 @@ if __name__ == '__main__':
     edges_path = EDGES_PATH
     genomic_variant_meta_path = GENOMIC_VARIANT_META_PATH
     gwas_stats_path = GWAS_STATS_PATH
-    data_dir = DATA_DIR
+    data_directory = DATA_DIR
 
     if not all([pheno_data_path, protein_data_path, metabo_data_path,
                 genomic_variant_meta_path, gwas_stats_path, edges_path]):
-        raise ValueError("Please provide paths to the phenotype, protein, metabolite and edges files.")
+        raise ValueError("Please provide paths to the phenotype, protein, metabolite, variant and edges files.")
 
     if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
-    #add_genomic_variants_neddrex(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
-    """
+    add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
-    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_dir)
+    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     # second pass for phenotypes
-    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_dir)
+    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
 
     # add cohort phenotype data as the mapping is incomplete
-    
+
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
-    """
-    #add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+    add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
-    # add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)
-    countEntries(db_session, metadata)
 
     # add remaining things (indexes, views)
     add_views(db_session)
     add_indexes(db_session, engine, metadata)
 
-    # calculate coverage
-    calculateCoverage(db_session)
     db_session.close()
     print("Database setup complete.")

@@ -1,5 +1,5 @@
-from sqlalchemy import URL, text, Table, MetaData, Index
-from models import *
+from sqlalchemy import text, Table
+from utils.models import *
 
 
 def add_views(session):
