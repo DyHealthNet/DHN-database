@@ -313,7 +313,7 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
 def add_cohort_genomic_variants(session, variant_meta_path, gwas_stats_path, obs_source):
     cohort_variants = read_variant_meta_file(variant_meta_path)
     # remove all cohort genomic variants with the same cohort_id
-    add_items(session, cohort_variants, CohortGenomicVariant, ['cohort_id'], bulk=True)
+    add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
     session.commit()
     print(f"Added {len(cohort_variants)} cohort genomic variants")
     effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
@@ -322,7 +322,7 @@ def add_cohort_genomic_variants(session, variant_meta_path, gwas_stats_path, obs
     def get_cohort_ids(model):
         return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
 
-    rsids_ids = get_cohort_ids(CohortGenomicVariant)
+    rsids_ids = get_cohort_ids(CohortVariant)
     protein_ids = get_cohort_ids(CohortProtein)
     metabolite_ids = get_cohort_ids(CohortMetabolite)
     phenotype_ids = get_cohort_ids(CohortPhenotype)

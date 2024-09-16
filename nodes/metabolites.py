@@ -108,7 +108,3 @@ def retrieve_assoc_metabolite_nodes(hmdb_mapping):
         diseases.update(hmdb_mapping[metabolite]['diseases'])
     return proteins, diseases
 
-
-if __name__ == '__main__':
-    metabo_data_path = '../../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
-    hmdb_data_path = '../../data/hmdb_metabolites.xml'
