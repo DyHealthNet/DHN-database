@@ -42,7 +42,7 @@ def delete_tables(session):
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
     session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
-    session.execute(text("DROP VIEW IF EXISTS external_node_ids;"))
+    session.execute(text("DROP VIEW IF EXISTS view_external_nodes;"))
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
     session.commit()
     Base.metadata.drop_all(engine, checkfirst=True)
@@ -157,7 +157,6 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
 
     available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
 
-    #         hpo_id = hpo_id.replace(':', '.').replace('HP', 'hpo')
     available_snomed_ids = {k: v.replace(':', '.').replace('HP', 'hpo') for k, v in available_snomed_ids.items()}
     pheno_data = get_phenotype_data(set(available_snomed_ids.values()))
 
@@ -225,7 +224,49 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_protein_data(session, protein_path=None, obs_source=None, missing_ids=None):
+def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_stats_path: str = None,
+                                obs_source: str = None):
+    cohort_variants = read_variant_meta_file(variant_meta_path)
+    # remove all cohort genomic variants with the same cohort_id
+    add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
+    session.commit()
+    print(f"Added {len(cohort_variants)} cohort genomic variants")
+    effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
+        gwas_stats_path)
+
+    def get_cohort_ids(model):
+        return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
+
+    rsids_ids = get_cohort_ids(CohortVariant)
+    protein_ids = get_cohort_ids(CohortProtein)
+    metabolite_ids = get_cohort_ids(CohortMetabolite)
+    phenotype_ids = get_cohort_ids(CohortPhenotype)
+
+    variant_protein_filtered = {obj for obj in effect_variant_protein_set if
+                                obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+    variant_metabolite_filtered = {obj for obj in effect_variant_metabolite_set if
+                                   obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+    variant_phenotype_filtered = {obj for obj in effect_variant_phenotype_set if
+                                  obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+
+    add_items(session, variant_metabolite_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
+              bulk=True)
+    add_items(session, variant_phenotype_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
+              bulk=True)
+    add_items(session, variant_protein_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
+    session.commit()
+
+    print(f"Added {len(variant_protein_filtered)} variant-protein associations, "
+          f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
+          f"{len(variant_phenotype_filtered)} variant-phenotype associations")
+
+    cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
+    add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
+              filter_args=["cohort_id", "clinvar_id"])
+    session.commit()
+
+
+def add_protein_data(session, protein_path: str = None, obs_source: str = None, missing_ids: set = None):
     if missing_ids is None:
         protein_ids = read_protein_id_chris(protein_path)
     else:
@@ -243,7 +284,7 @@ def add_protein_data(session, protein_path=None, obs_source=None, missing_ids=No
     session.commit()
 
 
-def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs_source: str = None):
+def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '../data', obs_source: str = None):
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
     download_metabolite_data(data_dir)
     metabolite_mapping = read_metabolite_mapping(metabolite_path)
@@ -310,50 +351,9 @@ def add_metabolite_data(session, metabolite_path, data_dir: str = '../data', obs
     session.commit()
 
 
-def add_cohort_genomic_variants(session, variant_meta_path, gwas_stats_path, obs_source):
-    cohort_variants = read_variant_meta_file(variant_meta_path)
-    # remove all cohort genomic variants with the same cohort_id
-    add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
-    session.commit()
-    print(f"Added {len(cohort_variants)} cohort genomic variants")
-    effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
-        gwas_stats_path)
-
-    def get_cohort_ids(model):
-        return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
-
-    rsids_ids = get_cohort_ids(CohortVariant)
-    protein_ids = get_cohort_ids(CohortProtein)
-    metabolite_ids = get_cohort_ids(CohortMetabolite)
-    phenotype_ids = get_cohort_ids(CohortPhenotype)
-
-    variant_protein_filtered = {obj for obj in effect_variant_protein_set if
-                                obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
-    variant_metabolite_filtered = {obj for obj in effect_variant_metabolite_set if
-                                   obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
-    variant_phenotype_filtered = {obj for obj in effect_variant_phenotype_set if
-                                  obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
-
-    add_items(session, variant_metabolite_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
-              bulk=True)
-    add_items(session, variant_phenotype_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
-              bulk=True)
-    add_items(session, variant_protein_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
-    session.commit()
-
-    print(f"Added {len(variant_protein_filtered)} variant-protein associations, "
-          f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
-          f"{len(variant_phenotype_filtered)} variant-phenotype associations")
-
-    cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
-    add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
-              filter_args=["cohort_id", "clinvar_id"])
-    session.commit()
-
-
-def add_genomic_variant_data(session, genomic_variant_meta_path, obs_source):
+def add_genomic_variant_data(session, variant_meta_path: str = None, obs_source: str = None):
     print("Adding genomic variants from NeDRex")
-    rs_id_list = read_rsid_chris(genomic_variant_meta_path)
+    rs_id_list = read_rsid_chris(variant_meta_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
@@ -365,14 +365,13 @@ def add_genomic_variant_data(session, genomic_variant_meta_path, obs_source):
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     session.commit()
 
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene,
-              filter_args=['entrez_id', 'clinvar_id'])
+    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
     session.commit()
     print("Added variant affects gene edges")
 
 
-def add_missing(session, data, node_type):
+def add_missing(session, data: iter = None, node_type: str = None):
     """
     Adds missing data to the database
     :param session: Session object
@@ -396,7 +395,6 @@ def add_missing(session, data, node_type):
 
 
 if __name__ == '__main__':
-    # Variant_affects_gene.__table__.drop(engine, checkfirst=True)
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
@@ -420,6 +418,8 @@ if __name__ == '__main__':
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
+    print("\nInitialising Layer 2 of database\n")
+
     add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
@@ -430,6 +430,7 @@ if __name__ == '__main__':
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
 
     # add cohort phenotype data as the mapping is incomplete
+    print("\nInitialising Layer 1 of database\n")
 
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)

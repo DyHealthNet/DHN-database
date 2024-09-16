@@ -47,10 +47,10 @@ def add_views(session):
         print("Created view view_references_edges.")
 
     # create new view called external_node_ids
-    view_exists = session.execute(text("SELECT to_regclass('external_node_ids')")).scalar()
+    view_exists = session.execute(text("SELECT to_regclass('view_external_nodes')")).scalar()
     if view_exists is None:
         view_sql = """
-            CREATE VIEW external_node_ids AS
+            CREATE VIEW view_external_nodes AS
             SELECT mondo_id as "node_id", 'disorder' as source_table FROM disorder
             UNION ALL
             SELECT entrez_id as "node_id", 'gene' as source_table FROM gene

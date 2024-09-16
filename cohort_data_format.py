@@ -86,7 +86,7 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
             else:
                 missing.add(hmdb_id)
 
-    print(f"{len(missing)} hmdb ids could not be mapped: {missing}")
+    print(f"Some HMDB IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} and {max(len(missing)-5, 0)} more")
     return metabolites_to_add, references_to_add
 
 
@@ -117,5 +117,6 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
             else:
                 missing.add(uniprot_id)
 
-    print(f"{len(missing)} uniprot ids could not be mapped: {missing}")
+    print(f"Some UniProt IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
+          f"and {max(len(missing)-5, 0)} more")
     return proteins_to_add, references_to_add
