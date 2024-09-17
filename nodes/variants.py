@@ -5,6 +5,9 @@ from settings import DEBUG
 from utils.models import CohortVariant, Genomic_variant, EffectVariantProtein, EffectVariantMetabolite, \
     EffectVariantPhenotype, Variant_affects_gene, Gene, CohortReferencesVariant
 from nedrex.core import iter_nodes
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def read_rsid_chris(variant_data_path: str):
@@ -13,7 +16,7 @@ def read_rsid_chris(variant_data_path: str):
     """
     df = pd.read_csv(variant_data_path, sep='\t')
     # check how many nans in the uniprot ocl
-    print("Number of nans in variant col:", df['rsid'].isna().sum())
+    logger.debug(f"Number of nans in variant col: {df['rsid'].isna().sum()}")
     df['rsid'] = df['rsid'].fillna('')
 
     rs_id_list = df[['rsid', 'pos', 'ref', 'alt']]
@@ -21,7 +24,7 @@ def read_rsid_chris(variant_data_path: str):
 
 
 def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
-    print("Genomic_variant IDs:", len(rs_id_from_cohort))
+    logger.debug(f"# of Genomic_variant IDs: {len(rs_id_from_cohort)}")
     no_ids = len(rs_id_from_cohort)
     rs_ids_with_alt_seq = set(zip(rs_id_from_cohort['rsid'], rs_id_from_cohort['alt']))
 
@@ -63,7 +66,7 @@ def read_variant_meta_file(variants_meta_path: str):
     reads Protein IDs from Chris dataset
     """
     variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
-    print("Iterating through gwas file")
+    logger.debug("Iterating through gwas file")
     variant_set = set()
     for index, row in variants_meta_df.iterrows():
         new_variant = CohortVariant(

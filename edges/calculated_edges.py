@@ -8,9 +8,12 @@
 import pandas as pd
 
 from utils.models import *
+from utils.logger import get_logger
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import sessionmaker
 from settings import *
+
+logger = get_logger(__name__)
 
 DB_EDGES = {
     ('protein', 'protein'): (EffectsProteinProtein, 'protein_id_1', 'protein_id_2'),
@@ -215,16 +218,16 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
         add_success = add_edges(session, formatted_edges_list)
         del formatted_edges_list
         if not add_success:
-            print("There was a problem adding the edges to the database, exiting...")
+            logger.error("There was a problem adding the edges to the database, exiting...")
             return
-        print(f"Chunk {i + 1}/{num_chunks} added successfully")
+        logger.info(f"Chunk {i + 1}/{num_chunks} added successfully")
         # do the value counts of the edges and add them to a running total
         chunk_edge_types = pd.Series(edge_types).value_counts().to_dict()
         num_edge_types = {edge_type: num_edge_types + chunk_edge_types.get(edge_type, 0)
                           for edge_type, num_edge_types in all_edge_types.items()}
 
     for edge_type, count in num_edge_types.items():
-        print(f"Added {count} edges of type {edge_type}")
+        logger.info(f"Added {count} edges of type {edge_type}")
     return
 
 
@@ -240,7 +243,7 @@ def add_edges(session, edges: list[Base]) -> bool:
         session.commit()
     except Exception as e:
         session.rollback()
-        print(f"A problem occurred while adding edges: {e}")
+        logger.error(f"A problem occurred while adding edges: {e}")
         return False
     return True
 
@@ -264,7 +267,7 @@ def add_calculated_edges(session, edges_path: str, pheno_data_path: str, protein
     pheno_set = get_labels(phenotypes, 'phenotype')
     protein_set = get_labels(proteins, 'protein')
     metabo_set = get_labels(metabolites, 'metabolite')
-    print("All cohort sets loaded successfully")
+    logger.debug("All cohort sets loaded successfully")
 
     format_edges(session, edges, protein_set, pheno_set, metabo_set)
     # formatted_edges = format_edges(edges[edges['pval'] <= 0.05], protein_set, pheno_map, metabo_map, disorder_map)

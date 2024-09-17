@@ -4,11 +4,14 @@ import requests
 from utils.query_nedrex import get_edge_associations
 from nedrex.core import iter_nodes
 from utils.models import Protein, ProteinAssocProtein
+from utils.logger import get_logger
 from settings import DEBUG
+
+logger = get_logger(__name__)
 
 
 def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> tuple[list[Protein], set[str]]:
-    print("UniProt IDs:", len(uniprot_ids))
+    logger.debug(f"UniProt IDs: {len(uniprot_ids)}")
     protein_set = []
     found_proteins = set()
     uniprot_ids = {f"uniprot.{uniprot_id}" for uniprot_id in uniprot_ids}
@@ -39,28 +42,11 @@ def read_protein_id_chris(proteinID_path: str):
     """
     df = pd.read_csv(proteinID_path, sep='\t')
     # check how many nans in the uniprot ocl
-    print("Number of nans in UniProt col:", df['UniProt'].isna().sum())
+    logger.debug(f"Number of nans in UniProt col: {df['UniProt'].isna().sum()}")
     df['UniProt'] = df['UniProt'].fillna('')
     uniprot_ids = df['UniProt'].str.split('|')
     uniprot_ids = set([uniprot for sublist in uniprot_ids for uniprot in sublist])
     return uniprot_ids
-
-
-def retrieve_interacting_proteins_neo4j(protein_ids):
-    # Constructing a string of protein IDs for the Cypher query
-    protein_id_string = ', '.join([f'"{protein_id}"' for protein_id in protein_ids])
-    #P04049
-    query = f"""
-    MATCH (p1:Protein)-[r]->(p2:Protein)
-    WHERE p1.primaryDomainId IN [{protein_id_string}] AND p2.primaryDomainId IN [{protein_id_string}]
-    RETURN p1.primaryDomainId, p2.primaryDomainId, r
-    """
-    url = "https://api.nedrex.net/neo4j/query"
-    response = requests.get(url, params={"query": query}, stream=True)
-    #print("response")
-    for line in response.iter_lines():
-        print("response")
-        print(json.loads(line.decode()))
 
 
 def get_protein_interactions(proteinIds):
@@ -68,11 +54,11 @@ def get_protein_interactions(proteinIds):
     # retrieve_interacting_proteins_neo4j(proteinIds)
     assoc_graph = get_edge_associations(proteinIds, edge_type='protein_interacts_with_protein',
                                         direction='undirected')
-    proteinInteractions = []
+    protein_interactions = []
     for edge in assoc_graph.edges():
-        uniprot_id_memberOne = edge[0]
-        uniprot_id_memberTwo = edge[1]
-        if (uniprot_id_memberTwo in proteinIds and uniprot_id_memberOne in proteinIds):
-            proteinInteractions.append(ProteinAssocProtein(uniprot_id_1=uniprot_id_memberOne,
-                                                           uniprot_id_2=uniprot_id_memberTwo))
-    return proteinInteractions
+        uniprot_id_member_one = edge[0]
+        uniprot_id_member_two = edge[1]
+        if uniprot_id_member_two in proteinIds and uniprot_id_member_one in proteinIds:
+            protein_interactions.append(ProteinAssocProtein(uniprot_id_1=uniprot_id_member_one,
+                                                            uniprot_id_2=uniprot_id_member_two))
+    return protein_interactions

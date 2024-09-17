@@ -1,5 +1,8 @@
 from sqlalchemy import text, Table
 from utils.models import *
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def add_views(session):
@@ -8,7 +11,7 @@ def add_views(session):
     if view_exists is not None:
         session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
         session.commit()
-        print("View view_description_fts already exists. Refreshed.")
+        logger.info("View view_description_fts already exists. Refreshed.")
     else:
         # sql alchemy doesn't support creating views, so we have to use raw sql
         view_sql = """
@@ -26,7 +29,7 @@ def add_views(session):
                 display_name, xrefs FROM cohort_variant;
         """
         session.execute(text(view_sql))
-        print("Created view view_description_fts.")
+        logger.info("Created view view_description_fts.")
 
     # create new view called view_references_edges
     view_exists = session.execute(text("SELECT to_regclass('view_references_edges')")).scalar()
@@ -44,7 +47,7 @@ def add_views(session):
         SELECT 'variant' AS source_table, cohort_id, clinvar_id as reference_id FROM cohort_references_variant;
         """
         session.execute(text(view_sql))
-        print("Created view view_references_edges.")
+        logger.info("Created view view_references_edges.")
 
     # create new view called external_node_ids
     view_exists = session.execute(text("SELECT to_regclass('view_external_nodes')")).scalar()
@@ -64,7 +67,7 @@ def add_views(session):
             SELECT clinvar_id as "node_id", 'genomic_variant' as source_table FROM genomic_variant;
         """
         session.execute(text(view_sql))
-        print("Created view external_node_ids")
+        logger.info("Created view external_node_ids")
 
     # create new view called view_associations_edges
     view_exists = session.execute(text("SELECT to_regclass('view_associations_edges')")).scalar()
@@ -84,10 +87,10 @@ def add_views(session):
         SELECT clinvar_id AS source_id, entrez_id AS target_id FROM variant_associates_gene;
         """
         session.execute(text(view_sql))
-        print("Created view view_associations_edges.")
+        logger.info("Created view view_associations_edges.")
     else:
         session.execute(text("REFRESH MATERIALIZED VIEW view_description_fts;"))
-        print("View view_associations_edges already exists. Refreshed.")
+        logger.info("View view_associations_edges already exists. Refreshed.")
     session.commit()
 
 
@@ -128,9 +131,9 @@ def add_indexes(session, engine, metadata):
 
     # add the last index that doesn't work well with sqlalchemy
     if session.execute(text("SELECT to_regclass('idx_description_fts')")).scalar():
-        print("Index idx_description_fts already exists.")
+        logger.info("Index idx_description_fts already exists.")
         return
     session.execute(text("CREATE INDEX idx_description_fts "
                          "ON view_description_fts USING gin(to_tsvector('english', description));"))
-    print("Created indexes")
+    logger.info("Created indexes")
     session.commit()

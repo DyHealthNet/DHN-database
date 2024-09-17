@@ -1,11 +1,14 @@
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
                           CohortReferencesMetabolite, CohortReferencesProtein, CohortReferencesPhenotype,
                           CohortReferencesDisease)
+from utils.logger import get_logger
 import pandas as pd
+
+logger = get_logger(__name__)
 
 
 def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> tuple[list, list, list]:
-    print("Adding cohort phenotype data to the database.")
+    logger.debug("Adding cohort phenotype data to the database.")
     # from the database, get the snomed ids and associated hpo ids/ mondo ids
     phenotypes = session.query(Phenotype).filter(Phenotype.observation_source == obs_source).all()
     disorders = session.query(Disorder).filter(Disorder.observation_source == obs_source).all()
@@ -15,7 +18,7 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
     snomed_map.update(
         {[y.split('.')[1] for y in x.xrefs if y.startswith('snomedct.')][0]: x.mondo_id for x in disorders})
 
-    print(f"Length of snomed map: {len(snomed_map)}")
+    logger.debug(f"Length of snomed map: {len(snomed_map)}")
     # read the phenotype data
     raw_phenotypes = pd.read_csv(phenotype_path, sep='\t')
     raw_phenotypes['snomed_id'] = raw_phenotypes['snomed_id'].fillna('')
@@ -51,12 +54,13 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
             else:
                 missing.add(snomed_id)
 
-    print(f"{len(missing)} snomed ids could not be mapped: {missing}")
+    logger.info(f"Some SNOMED ids could not be mapped {list(missing)[:min(len(missing)-1,5)]} "
+                f"and {max(len(missing)-5, 0)} more")
     return phenotypes_to_add, disorder_references_to_add, phenotype_references_to_add
 
 
 def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None) -> tuple[list, list]:
-    print("Adding cohort metabolite data to the database.")
+    logger.debug("Adding cohort metabolite data to the database.")
     metabolite_matches = session.query(Metabolite).filter(Metabolite.observation_source == obs_source).all()
     metabolite_map = {x.hmdb_id: x.hmdb_id for x in metabolite_matches}
     for x in metabolite_matches:
@@ -86,12 +90,13 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
             else:
                 missing.add(hmdb_id)
 
-    print(f"Some HMDB IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} and {max(len(missing)-5, 0)} more")
+    logger.info(f"Some HMDB IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
+                f"and {max(len(missing)-5, 0)} more")
     return metabolites_to_add, references_to_add
 
 
 def cohort_protein_data(session, protein_path: str = None, obs_source: str = None) -> tuple[list, list]:
-    print("Adding cohort protein data to the database.")
+    logger.debug("Adding cohort protein data to the database.")
     protein_matches = session.query(Protein).filter(Protein.observation_source == obs_source).all()
     protein_map = {x.uniprot_id: x.display_name for x in protein_matches}
 
@@ -117,6 +122,6 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
             else:
                 missing.add(uniprot_id)
 
-    print(f"Some UniProt IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
-          f"and {max(len(missing)-5, 0)} more")
+    logger.info(f"Some UniProt IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
+                f"and {max(len(missing)-5, 0)} more")
     return proteins_to_add, references_to_add

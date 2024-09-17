@@ -1,3 +1,5 @@
+import logging
+
 from settings import *
 from nodes.cohort_nodes import *
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,6 +20,9 @@ from utils.models import *
 from utils.query_nedrex import domain_id_to_mondo, get_disorder_data, get_edge_associations, get_gene_data, \
     get_phenotype_data
 from utils.database_views import add_views, add_indexes
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 url = url_object = URL.create(
     "postgresql",
@@ -29,7 +34,7 @@ url = url_object = URL.create(
 )
 
 engine = create_engine(url)
-print("Connected to the database")
+logger.info("Connected to the database")
 
 
 def create_tables():
@@ -38,7 +43,7 @@ def create_tables():
 
 
 def delete_tables(session):
-    print("Removing all tables from the database.")
+    logger.warning("Removing all tables from the database.")
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
     session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
@@ -72,17 +77,17 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
                 session.delete(exists)
             except SQLAlchemyError as e:
                 session.rollback()
-                print("Could not delete existing item: ", e, "moving on...")
+                logger.warning(f"Could not delete existing item: {e} moving on...")
         elif exists is not None:
             continue
         try:
             session.add(item)
         except SQLAlchemyError as e:
             session.rollback()
-            print("SQLAlchemy Error: ", e)
+            logger.error(f"SQLAlchemy Error: {e}")
         except Exception as e:
             session.rollback()
-            print("Exception: ", e)
+            logger.error(f"Exception: {e}")
     session.commit()
 
 
@@ -126,7 +131,7 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     add_items(session, disorders, Disorder, ['mondo_id'])
     add_items(session, gene_associations, GeneAssocDisorder, ['entrez_id', 'mondo_id'])
     session.commit()
-    print(f"Found and successfully added {found} snomed ids with diseases to db")
+    logger.info(f"Found and successfully added {found} snomed ids with diseases to db")
 
 
 def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../data', missing_ids: list = None,
@@ -183,8 +188,8 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
         if session.query(Disorder).filter_by(mondo_id=assoc.mondo_id).first() is None:
             removable_associations.append(assoc)
 
-    print(f"Removing {len(removable_phenotypes)} phenotypes and {len(removable_associations)} associations that are "
-          f"already in the disorder database")
+    logger.debug(f"Removing {len(removable_phenotypes)} phenotypes and {len(removable_associations)} associations that "
+                 f"are already in the disorder database")
     phenotypes = phenotypes - set(removable_phenotypes)
     disorder_associations = disorder_associations - set(removable_associations)
 
@@ -193,7 +198,7 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
     add_items(session, disorder_associations, DisorderAssocPhenotype, ['mondo_id', 'hpo_id'])
 
     session.commit()
-    print(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
+    logger.info(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
 def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None):
@@ -203,7 +208,7 @@ def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: s
     add_items(session, phenotype_refs, CohortReferencesPhenotype, ['cohort_id', 'hpo_id'])
     add_items(session, disorder_refs, CohortReferencesDisease, ['cohort_id', 'mondo_id'])
     session.commit()
-    print(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
+    logger.info(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
 
 
 def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None):
@@ -212,7 +217,7 @@ def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source:
     add_items(session, metabolites_to_add, CohortMetabolite, ['cohort_id'])
     add_items(session, metabolite_refs, CohortReferencesMetabolite, ['cohort_id', 'hmdb_id'])
     session.commit()
-    print(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
+    logger.info(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
 
 
 def add_cohort_protein_data(session, protein_path: str = None, obs_source: str = None):
@@ -221,7 +226,7 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     add_items(session, proteins_to_add, CohortProtein, ['cohort_id'])
     add_items(session, protein_refs, CohortReferencesProtein, ['cohort_id', 'uniprot_id'])
     session.commit()
-    print(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
+    logger.info(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
 def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_stats_path: str = None,
@@ -230,7 +235,7 @@ def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_sta
     # remove all cohort genomic variants with the same cohort_id
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
     session.commit()
-    print(f"Added {len(cohort_variants)} cohort genomic variants")
+    logger.info(f"Found and successfully added {len(cohort_variants)} variants from cohort to db")
     effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
         gwas_stats_path)
 
@@ -256,9 +261,9 @@ def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_sta
     add_items(session, variant_protein_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
     session.commit()
 
-    print(f"Added {len(variant_protein_filtered)} variant-protein associations, "
-          f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
-          f"{len(variant_phenotype_filtered)} variant-phenotype associations")
+    logger.info(f"Added {len(variant_protein_filtered)} variant-protein associations, "
+                f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
+                f"{len(variant_phenotype_filtered)} variant-phenotype associations")
 
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
@@ -273,11 +278,11 @@ def add_protein_data(session, protein_path: str = None, obs_source: str = None, 
         protein_ids = missing_ids
     protein_nodes, found_proteins = get_protein_nodes(protein_ids, obs_source)
     needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in protein_ids}
-    print(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
-          f"{len(needed_ids - found_proteins) - 5} more")
+    logger.info(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
+                f"{len(needed_ids - found_proteins) - 5} more")
 
     available_proteins = {x.uniprot_id for x in protein_nodes}
-    print(f"Got {len(protein_nodes)} protein nodes")
+    logger.debug(f"Got {len(protein_nodes)} protein nodes")
     protein_interactions = get_protein_interactions(available_proteins)
     add_items(session, protein_nodes, Protein, ['uniprot_id'])
     add_items(session, protein_interactions, ProteinAssocProtein, ['id'])
@@ -294,13 +299,13 @@ def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '.
     for metabolite in metabolite_mapping['hmdb_id'].dropna():
         unique_metabolites.update(metabolite.split(';'))
 
-    print(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
+    logger.debug(f"Found {len(unique_metabolites)} unique metabolites in the mapping file.")
     omim_diseases = get_additional_diseases(session, obs_source)
 
     hmdb_mapping = read_hmdb_data(hmdb_data_path, unique_metabolites, omim_ids=omim_diseases,
                                   observation_source=obs_source)
-    print(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
-          f"{len(unique_metabolites)} metabolites in the mapping file.")
+    logger.info(f"Found info for {len(hmdb_mapping)} metabolites in the hmdb data file out of "
+                f"{len(unique_metabolites)} metabolites in the mapping file.")
 
     omim_diseases = set()
     for metabolite in hmdb_mapping:
@@ -342,9 +347,9 @@ def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '.
                 continue
             metabolite_protein_associations.append(ProteinAssocMetabolite(hmdb_id=metabolite_name, uniprot_id=protein))
 
-    print(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
-          f"as well as {len(metabolite_protein_associations)} protein associations and "
-          f"{len(metabolite_disease_associations)} disease associations.")
+    logger.info(f"A total of {len(metabolites)} metabolites were found in the mapping file, "
+                f"as well as {len(metabolite_protein_associations)} protein associations and "
+                f"{len(metabolite_disease_associations)} disease associations.")
     add_items(session, metabolites, Metabolite, ['hmdb_id'])
     add_items(session, metabolite_protein_associations, ProteinAssocMetabolite, ['hmdb_id', 'uniprot_id'])
     add_items(session, metabolite_disease_associations, MetaboliteAssocDisorder, ['hmdb_id', 'mondo_id'])
@@ -352,12 +357,11 @@ def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '.
 
 
 def add_genomic_variant_data(session, variant_meta_path: str = None, obs_source: str = None):
-    print("Adding genomic variants from NeDRex")
     rs_id_list = read_rsid_chris(variant_meta_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
-    print(f"Added {len(variants_to_add)} genomic variants")
+    logger.info(f"Added {len(variants_to_add)} genomic variants")
 
     genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
     genes_to_add, variant_affects_gene_to_add = add_variant_affects_gene(genomic_variant_ids, obs_source=obs_source)
@@ -368,7 +372,7 @@ def add_genomic_variant_data(session, variant_meta_path: str = None, obs_source:
     add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
     session.commit()
-    print("Added variant affects gene edges")
+    logger.info("Added variant affects gene edges")
 
 
 def add_missing(session, data: iter = None, node_type: str = None):
@@ -388,9 +392,9 @@ def add_missing(session, data: iter = None, node_type: str = None):
     if node_type not in valid_node_types:
         raise ValueError(f"Invalid node type: {node_type}")
     if len(data) == 0:
-        print(f"No missing {node_type} to add to the database.")
+        logger.debug(f"No missing {node_type} to add to the database.")
         return
-    print(f"Got {len(data)} missing {node_type} to add to the database.")
+    logger.info(f"Got {len(data)} missing {node_type} to add to the database.")
     valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
 
@@ -418,34 +422,53 @@ if __name__ == '__main__':
                                             edges_path, genomic_variant_meta_path, gwas_stats_path]]):
         raise ValueError("Some of the provided paths do not exist.")
 
-    print("\nInitialising Layer 2 of database\n")
+    logger.info("Initialising Layer 2 of database\n")
 
+    logger.info("Adding genetic variants...")
     add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding disorders...")
     add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding phenotypes...")
     add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+
+    logger.info("Adding proteins...")
     add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding metabolites...")
     add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     # second pass for phenotypes
+    logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
     add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
 
     # add cohort phenotype data as the mapping is incomplete
-    print("\nInitialising Layer 1 of database\n")
+    logger.info("Initialising Layer 1 of database\n")
 
+    logger.info("Adding cohort phenotypes...")
     add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding cohort metabolites...")
     add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding cohort proteins...")
     add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+
+    logger.info("Adding cohort genomic variants...")
     add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
+    logger.info("Adding calculated edges...")
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)
 
     # add remaining things (indexes, views)
+    logger.info("Adding views and indexes...")
     add_views(db_session)
     add_indexes(db_session, engine, metadata)
 
     db_session.close()
-    print("Database setup complete.")
+    logger.info("Database setup complete.")

@@ -2,6 +2,9 @@ import os.path
 import pandas as pd
 import xml.etree.ElementTree as ET
 from settings import DEBUG
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def download_metabolite_data(data_path: str):
@@ -97,7 +100,8 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
             break
 
     missing = relevant_ids - found_ids
-    print(f"Ids that could not be found: {list(missing)[:min(len(missing) - 1, 5)]} and {max(len(missing) - 5, 0)} more")
+    logger.info(f"Ids that could not be found: {list(missing)[:min(len(missing) - 1, 5)]} "
+                f"and {max(len(missing) - 5, 0)} more")
     return hmdb_info
 
 
