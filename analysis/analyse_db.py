@@ -74,3 +74,23 @@ metabolite_coverage = coverage(CohortMetabolite, CohortReferencesMetabolite)
 print(f"Metabolite coverage: {metabolite_coverage:.2f}")
 phenotype_coverage = coverage(CohortPhenotype, CohortReferencesPhenotype, CohortReferencesDisease)
 print(f"Phenotype coverage: {phenotype_coverage:.2f}")
+
+#%%
+import matplotlib.pyplot as plt
+
+coverage = [('Variant', variant_coverage), ('Protein', protein_coverage),
+            ('Metabolite', metabolite_coverage), ('Phenotype', phenotype_coverage)]
+coverage.sort(key=lambda x: x[1], reverse=True)
+
+# plot the coverage
+fig, ax = plt.subplots()
+
+ax.bar([x[0] for x in coverage], [x[1] * 100 for x in coverage])
+for i, v in enumerate([x[1] * 100 for x in coverage]):
+    ax.text(i, v + 1, f"{v:.2f}%", ha='center', va='bottom')
+ax.set_ylabel('Coverage in %')
+ax.set_xlabel('Node type')
+ax.set_title('Coverage of the different node types')
+fig.tight_layout()
+fig.savefig('coverage.png')
+plt.show()
