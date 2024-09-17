@@ -1,5 +1,6 @@
 #%%
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import distinct
 from setup_db import engine
 from utils.models import *
 import inspect
@@ -9,7 +10,8 @@ import sys
 Session = sessionmaker(bind=engine)
 session = Session()
 
-all_models = [cls for name, cls in inspect.getmembers(sys.modules['models']) if inspect.isclass(cls)]
+all_models = [cls for name, cls in inspect.getmembers(sys.modules['utils.models']) if inspect.isclass(cls) and
+              hasattr(cls, '__tablename__')]
 nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, Genomic_variant, CohortProtein, CohortMetabolite,
          CohortPhenotype]
 print(len(all_models))
@@ -47,5 +49,28 @@ for model in all_models:
 print(f"Cumulative rows in layer one: {layer_one:,}")
 print(f"Cumulative rows in layer two: {layer_two:,}")
 
+
 #%%
-# calculate the coverage using
+# calculate the coverage
+def coverage(base_reference, model, model_2 = None):
+    # retrieve the number of unique rows of cohort_id column
+    total_cohort = session.query(base_reference.cohort_id).count()
+    if not model_2:
+        num_rows = session.query(distinct(model.cohort_id)).count()
+        return num_rows / total_cohort
+
+    rows_1 = session.query(distinct(model.cohort_id)).all()
+    rows_2 = session.query(distinct(model_2.cohort_id)).all()
+    combined_rows = set(rows_1) | (set(rows_2))
+
+    return len(combined_rows) / total_cohort
+
+
+variant_coverage = coverage(CohortVariant, CohortReferencesVariant)
+print(f"Variant coverage: {variant_coverage:.2f}")
+protein_coverage = coverage(CohortProtein, CohortReferencesProtein)
+print(f"Protein coverage: {protein_coverage:.2f}")
+metabolite_coverage = coverage(CohortMetabolite, CohortReferencesMetabolite)
+print(f"Metabolite coverage: {metabolite_coverage:.2f}")
+phenotype_coverage = coverage(CohortPhenotype, CohortReferencesPhenotype, CohortReferencesDisease)
+print(f"Phenotype coverage: {phenotype_coverage:.2f}")
