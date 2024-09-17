@@ -1,4 +1,5 @@
-import logging
+import inspect
+import sys
 
 from settings import *
 from nodes.cohort_nodes import *
@@ -6,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
+from sqlalchemy import inspect as sql_inspect
 
 from nodes.variants import add_variant_affects_gene, get_cohort_references_variant
 from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions
@@ -398,6 +400,21 @@ def add_missing(session, data: iter = None, node_type: str = None):
     valid_node_types[node_type](session, missing_ids=data, obs_source='external')
 
 
+def add_node_type(data_path: str = None, data_path_2: str = None) -> bool:
+    if not data_path:
+        return False
+
+    if not os.path.exists(data_path):
+        logger.error(f"Path {data_path} does not exist. Not adding.")
+        return False
+
+    if data_path_2 and not os.path.exists(data_path_2):
+        logger.error(f"Path {data_path_2} does not exist. Not adding.")
+        return False
+
+    return True
+
+
 if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
@@ -414,49 +431,67 @@ if __name__ == '__main__':
     gwas_stats_path = GWAS_STATS_PATH
     data_directory = DATA_DIR
 
-    if not all([pheno_data_path, protein_data_path, metabo_data_path,
-                genomic_variant_meta_path, gwas_stats_path, edges_path]):
-        raise ValueError("Please provide paths to the phenotype, protein, metabolite, variant and edges files.")
+    if not all([edges_path, data_directory]):
+        logger.error("Please provide paths to the edges file and data directory.")
+        sys.exit(1)
 
-    if not all([os.path.exists(x) for x in [pheno_data_path, protein_data_path, metabo_data_path,
-                                            edges_path, genomic_variant_meta_path, gwas_stats_path]]):
-        raise ValueError("Some of the provided paths do not exist.")
+    if not all([os.path.exists(x) for x in [edges_path, data_directory]]):
+        logger.error("Please provide valid paths to the data files.")
+        sys.exit(1)
+
+    add_proteins = add_node_type(protein_data_path)
+    add_phenotypes = add_node_type(pheno_data_path)
+    add_metabolites = add_node_type(metabo_data_path)
+    add_variants = add_node_type(genomic_variant_meta_path, gwas_stats_path)
+
+    logger.info(f"Will add {'proteins, ' if add_proteins else ''}{'phenotypes, ' if add_phenotypes else ''}"
+                f"{'metabolites, ' if add_metabolites else ''}{'variants ' if add_variants else ''}to the db.")
 
     logger.info("Initialising Layer 2 of database\n")
 
-    logger.info("Adding genetic variants...")
-    add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+    if add_variants:
+        logger.info("Adding genetic variants...")
+        add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding disorders...")
-    add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    if add_phenotypes:
+        logger.info("Adding disorders...")
+        add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding phenotypes...")
-    add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    if add_phenotypes:
+        logger.info("Adding phenotypes...")
+        add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
-    logger.info("Adding proteins...")
-    add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    if add_proteins:
+        logger.info("Adding proteins...")
+        add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding metabolites...")
-    add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    if add_metabolites:
+        logger.info("Adding metabolites...")
+        add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     # second pass for phenotypes
-    logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
-    add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
+    if add_phenotypes:
+        logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
+        add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
 
     # add cohort phenotype data as the mapping is incomplete
     logger.info("Initialising Layer 1 of database\n")
 
-    logger.info("Adding cohort phenotypes...")
-    add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    if add_phenotypes:
+        logger.info("Adding cohort phenotypes...")
+        add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding cohort metabolites...")
-    add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    if add_metabolites:
+        logger.info("Adding cohort metabolites...")
+        add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding cohort proteins...")
-    add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    if add_proteins:
+        logger.info("Adding cohort proteins...")
+        add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
 
-    logger.info("Adding cohort genomic variants...")
-    add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+    if add_variants:
+        logger.info("Adding cohort genomic variants...")
+        add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
     logger.info("Adding calculated edges...")

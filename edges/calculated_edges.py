@@ -30,13 +30,15 @@ DB_EDGES = {
 }
 
 
-def load_files(file_path: str, sep="\t") -> pd.DataFrame:
+def load_files(file_path: str, sep="\t") -> pd.DataFrame|None:
     """
     Load the file from the given path as a pandas DataFrame
     :param file_path: str - path to the file
     :param sep: separator for the file
     :return: Pandas DataFrame
     """
+    if not file_path:
+        return None
     return pd.read_csv(file_path, sep=sep)
 
 
@@ -48,6 +50,8 @@ def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     :param label_type: str - the type of label to retrieve
     :return: set of unique labels
     """
+    if not isinstance(label_file, pd.DataFrame):
+        return set()
     name_col = {
         'protein': 'protein_id',
         'metabolite': 'analyte_name',
@@ -286,9 +290,9 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     db_session = Session()
 
-    edges_path = '../../data/scores_including_tests.csv'
-    pheno_data_path = '../../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    protein_data_path = '../../data/DyHealthNet/chris_summary_data/proteins/CHRIS_somalogic_descriptive_statistic.txt'
-    metabo_data_path = '../../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    edges_path = '../data/scores_including_tests.csv'
+    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
+    protein_data_path = None
+    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
 
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)

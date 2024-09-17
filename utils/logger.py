@@ -17,11 +17,18 @@ def get_logger(name: str):
         logger.setLevel(logging.INFO)
 
     if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter(
             '[%(asctime)s] [%(name)s] [%(levelname)s]: %(message)s'
         ))
-        logger.addHandler(handler)
+
+        file_handler = logging.FileHandler('db_setup.log')
+        file_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s] [%(name)s] [%(levelname)s]: %(message)s'
+        ))
+
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
 
     return logger
 
