@@ -93,7 +93,7 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     session.commit()
 
 
-def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
+def add_disorder_data(session, file_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
     :param session: Database session object
@@ -104,7 +104,7 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     :return: None
     """
     if missing_ids is None:
-        needed_snomed = get_needed_snomed_ids(snomed_id_path)
+        needed_snomed = get_needed_snomed_ids(file_path)
         data = get_disorder_data(needed_snomed)
         domain_to_mondo = domain_id_to_mondo(data)
     else:
@@ -136,13 +136,13 @@ def add_disorder_data(session, snomed_id_path: str = None, missing_ids: set[str]
     logger.info(f"Found and successfully added {found} snomed ids with diseases to db")
 
 
-def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../data', missing_ids: list = None,
+def add_phenotype_data(session, file_path: str = None, data_dir: str = '../data', missing_ids: list = None,
                        obs_source: str = None):
     """
     Adds phenotype data to the database given a path to a file with phenotype data
     :param obs_source: Describes the source of observations - e.g. CHRIS
     :param session: Database session object
-    :param phenotype_path: str, path to file with phenotype data
+    :param file_path: str, path to file with phenotype data
     :param missing_ids: Optional - set of hpo ids to add to the database. Use this to add missing hpo ids from
     :param data_dir: str, path to the data directory
     :return: None
@@ -154,10 +154,10 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
     if not all([os.path.exists(f) for f in needed_files]):
         download_hpo_ontology(data_dir)
 
-    if not phenotype_path:
+    if not file_path:
         needed_ids = missing_ids
     else:
-        needed_ids = get_needed_snomed_ids(phenotype_path)
+        needed_ids = get_needed_snomed_ids(file_path)
 
     hpo_data = read_hpo_ontology(needed_files[0])
     hpo_graph = ontology_data_to_network(hpo_data)
@@ -203,8 +203,8 @@ def add_phenotype_data(session, phenotype_path: str = None, data_dir: str = '../
     logger.info(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
-def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None):
-    phenotypes_to_add, phenotype_refs, disorder_refs = cohort_phenotype_data(session, phenotype_path, obs_source)
+def add_cohort_phenotype_data(session, data_path: str = None, obs_source: str = None):
+    phenotypes_to_add, phenotype_refs, disorder_refs = cohort_phenotype_data(session, data_path, obs_source)
 
     add_items(session, phenotypes_to_add, CohortPhenotype, ['cohort_id'])
     add_items(session, phenotype_refs, CohortReferencesPhenotype, ['cohort_id', 'hpo_id'])
@@ -213,8 +213,8 @@ def add_cohort_phenotype_data(session, phenotype_path: str = None, obs_source: s
     logger.info(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
 
 
-def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None):
-    metabolites_to_add, metabolite_refs = cohort_metabolite_data(session, metabolite_path, obs_source)
+def add_cohort_metabolite_data(session, data_path: str = None, obs_source: str = None):
+    metabolites_to_add, metabolite_refs = cohort_metabolite_data(session, data_path, obs_source)
 
     add_items(session, metabolites_to_add, CohortMetabolite, ['cohort_id'])
     add_items(session, metabolite_refs, CohortReferencesMetabolite, ['cohort_id', 'hmdb_id'])
@@ -222,8 +222,8 @@ def add_cohort_metabolite_data(session, metabolite_path: str = None, obs_source:
     logger.info(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
 
 
-def add_cohort_protein_data(session, protein_path: str = None, obs_source: str = None):
-    proteins_to_add, protein_refs = cohort_protein_data(session, protein_path, obs_source)
+def add_cohort_protein_data(session, data_path: str = None, obs_source: str = None):
+    proteins_to_add, protein_refs = cohort_protein_data(session, data_path, obs_source)
 
     add_items(session, proteins_to_add, CohortProtein, ['cohort_id'])
     add_items(session, protein_refs, CohortReferencesProtein, ['cohort_id', 'uniprot_id'])
@@ -231,15 +231,14 @@ def add_cohort_protein_data(session, protein_path: str = None, obs_source: str =
     logger.info(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_stats_path: str = None,
+def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_path: str = None,
                                 obs_source: str = None):
     cohort_variants = read_variant_meta_file(variant_meta_path)
-    # remove all cohort genomic variants with the same cohort_id
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
     session.commit()
     logger.info(f"Found and successfully added {len(cohort_variants)} variants from cohort to db")
     effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
-        gwas_stats_path)
+        gwas_path)
 
     def get_cohort_ids(model):
         return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
@@ -273,9 +272,9 @@ def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_sta
     session.commit()
 
 
-def add_protein_data(session, protein_path: str = None, obs_source: str = None, missing_ids: set = None):
+def add_protein_data(session, file_path: str = None, obs_source: str = None, missing_ids: set = None):
     if missing_ids is None:
-        protein_ids = read_protein_id_chris(protein_path)
+        protein_ids = read_protein_id_chris(file_path)
     else:
         protein_ids = missing_ids
     protein_nodes, found_proteins = get_protein_nodes(protein_ids, obs_source)
@@ -291,10 +290,10 @@ def add_protein_data(session, protein_path: str = None, obs_source: str = None, 
     session.commit()
 
 
-def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '../data', obs_source: str = None):
+def add_metabolite_data(session, file_path: str = None, data_dir: str = '../data', obs_source: str = None):
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
     download_metabolite_data(data_dir)
-    metabolite_mapping = read_metabolite_mapping(metabolite_path)
+    metabolite_mapping = read_metabolite_mapping(file_path)
     unique_metabolites = set()
 
     # split metabolites that have ; in them
@@ -358,8 +357,8 @@ def add_metabolite_data(session, metabolite_path: str = None, data_dir: str = '.
     session.commit()
 
 
-def add_genomic_variant_data(session, variant_meta_path: str = None, obs_source: str = None):
-    rs_id_list = read_rsid_chris(variant_meta_path)
+def add_genomic_variant_data(session, file_path: str = None, obs_source: str = None):
+    rs_id_list = read_rsid_chris(file_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
     session.commit()
@@ -415,6 +414,12 @@ def add_node_type(data_path: str = None, data_path_2: str = None) -> bool:
     return True
 
 
+def add_layer_node(add_node: bool = False, node_name: str = None, function: callable = None, **kwargs):
+    if add_node:
+        logger.info(f"Adding {node_name}...")
+        function(**kwargs)
+
+
 if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
@@ -439,6 +444,7 @@ if __name__ == '__main__':
         logger.error("Please provide valid paths to the data files.")
         sys.exit(1)
 
+    # returns bool if the node type should be added or not
     add_proteins = add_node_type(protein_data_path)
     add_phenotypes = add_node_type(pheno_data_path)
     add_metabolites = add_node_type(metabo_data_path)
@@ -449,49 +455,39 @@ if __name__ == '__main__':
 
     logger.info("Initialising Layer 2 of database\n")
 
-    if add_variants:
-        logger.info("Adding genetic variants...")
-        add_genomic_variant_data(db_session, genomic_variant_meta_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
+                   file_path=genomic_variant_meta_path, obs_source=OBSERVATIONS)
 
-    if add_phenotypes:
-        logger.info("Adding disorders...")
-        add_disorder_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
+                   file_path=pheno_data_path, obs_source=OBSERVATIONS)
 
-    if add_phenotypes:
-        logger.info("Adding phenotypes...")
-        add_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
+                   file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
-    if add_proteins:
-        logger.info("Adding proteins...")
-        add_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
+                   file_path=protein_data_path, protein_path=protein_data_path, obs_source=OBSERVATIONS)
 
-    if add_metabolites:
-        logger.info("Adding metabolites...")
-        add_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    add_layer_node(add_metabolites, "metabolites", add_metabolite_data, session=db_session,
+                   file_path=metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     # second pass for phenotypes
     if add_phenotypes:
         logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
         add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
 
-    # add cohort phenotype data as the mapping is incomplete
     logger.info("Initialising Layer 1 of database\n")
 
-    if add_phenotypes:
-        logger.info("Adding cohort phenotypes...")
-        add_cohort_phenotype_data(db_session, pheno_data_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_phenotypes, "cohort phenotypes", add_cohort_phenotype_data, session=db_session,
+                   data_path=pheno_data_path, obs_source=OBSERVATIONS)
 
-    if add_metabolites:
-        logger.info("Adding cohort metabolites...")
-        add_cohort_metabolite_data(db_session, metabo_data_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_metabolites, "cohort metabolites", add_cohort_metabolite_data, session=db_session,
+                   data_path=metabo_data_path, obs_source=OBSERVATIONS)
 
-    if add_proteins:
-        logger.info("Adding cohort proteins...")
-        add_cohort_protein_data(db_session, protein_data_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_proteins, "cohort proteins", add_cohort_protein_data, session=db_session,
+                   data_path=protein_data_path, obs_source=OBSERVATIONS)
 
-    if add_variants:
-        logger.info("Adding cohort genomic variants...")
-        add_cohort_genomic_variants(db_session, genomic_variant_meta_path, gwas_stats_path, obs_source=OBSERVATIONS)
+    add_layer_node(add_variants, "cohort genomic variants", add_cohort_genomic_variants, session=db_session,
+                   variant_meta_path=genomic_variant_meta_path, gwas_path=gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
     logger.info("Adding calculated edges...")
