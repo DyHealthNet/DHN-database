@@ -465,7 +465,7 @@ if __name__ == '__main__':
                    file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
-                   file_path=protein_data_path, protein_path=protein_data_path, obs_source=OBSERVATIONS)
+                   file_path=protein_data_path, obs_source=OBSERVATIONS)
 
     add_layer_node(add_metabolites, "metabolites", add_metabolite_data, session=db_session,
                    file_path=metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)

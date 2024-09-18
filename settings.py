@@ -30,6 +30,22 @@ DATA_DIR = os.getenv("DATA_DIR")
 GWAS_STATS_PATH = os.getenv("GWAS_STATS_PATH")
 GENOMIC_VARIANT_META_PATH = os.getenv("GENOMIC_VARIANT_META_PATH")
 
+# Cohort Columns
+COHORT_COLUMNS = {
+    "phenotype": {'unique_id': os.getenv("PHENOTYPE_LABEL_COLUMN"),
+                  'display_name': os.getenv("PHENOTYPE_DP_NAME_COLUMN"),
+                  'description': os.getenv("PHENOTYPE_DESCRIPTION_COLUMN"),
+                  'xref': os.getenv("PHENOTYPE_XREF_COLUMN")},
+    "protein": {'unique_id': os.getenv("PROTEIN_LABEL_COLUMN"),
+                'display_name': os.getenv("PROTEIN_DP_NAME_COLUMN"),
+                'description': os.getenv("PROTEIN_DESCRIPTION_COLUMN"),
+                'xref': os.getenv("PROTEIN_XREF_COLUMN")},
+    "metabolite": {'unique_id': os.getenv("METABOLITE_LABEL_COLUMN"),
+                   'display_name': os.getenv("METABOLITE_DP_NAME_COLUMN"),
+                   'description': os.getenv("METABOLITE_DESCRIPTION_COLUMN"),
+                   'xref': os.getenv("METABOLITE_XREF_COLUMN")},
+}
+
 # Other settings
 CHUNK_SIZE = os.getenv("CHUNK_SIZE") if os.getenv("CHUNK_SIZE") else 10_000_000
 
@@ -46,6 +62,12 @@ logger.debug(f"PROTEIN_PATH: {PROTEIN_PATH}")
 logger.debug(f"METABOLITE_PATH: {METABOLITE_PATH}")
 logger.debug(f"EDGES_PATH: {EDGES_PATH}")
 logger.debug(f"DATA_DIR: {DATA_DIR}")
+logger.debug(f"GWAS_STATS_PATH: {GWAS_STATS_PATH}")
+logger.debug(f"GENOMIC_VARIANT_META_PATH: {GENOMIC_VARIANT_META_PATH}")
+logger.debug("---------- Cohort Columns ----------")
+logger.debug(f"Protein columns: {COHORT_COLUMNS['protein']}")
+logger.debug(f"Phenotype columns: {COHORT_COLUMNS['phenotype']}")
+logger.debug(f"Metabolite columns: {COHORT_COLUMNS['metabolite']}")
 logger.debug("---------- Miscellaneous ----------")
 logger.debug(f"OBSERVATIONS: {OBSERVATIONS}")
 logger.debug(f"CHUNK_SIZE: {CHUNK_SIZE:,}")
