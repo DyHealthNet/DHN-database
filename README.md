@@ -10,29 +10,6 @@ Before you can run the script, you need to ensure the following:
 - you need to download the data from the HMDB database and place it in the data folder before 
   running the setup as this can not be done automatically
 - make sure your .env file is set up correctly, follow the .env.example file
-- the files need some columns specifically named  for the script to run:
-```
-# For each file we have:
-usage: column_name
-
-# Proteins
-unique_id: protein_id
-display_name: UniProt # currently we take it from the external db part
-description: long_description
-cross-ref: UniProt
-
-# Metabolites
-unique_id: analyte_name
-display_name: biochemical_name
-description: analyte_class
-cross-ref: hmdb_id
-
-# Phenotypes
-unique_id: label
-display_name: snomed_term
-description: description
-cross-ref: snomed_id
-```
 
 ## Build the database
 
