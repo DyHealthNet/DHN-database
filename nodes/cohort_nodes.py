@@ -12,7 +12,7 @@ def get_cols(node_type: str) -> tuple[str, str, str, str]:
     cols = COHORT_COLUMNS.get(node_type)
     if not cols:
         raise ValueError(f"Node type {node_type} not found in the cohort columns")
-    return cols['unique_id'], cols['display_name'], cols['description'], cols['xrefs']
+    return cols['unique_id'], cols['display_name'], cols['description'], cols['xref']
 
 
 def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> tuple[list, list, list]:
