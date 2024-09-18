@@ -12,7 +12,7 @@ session = Session()
 
 all_models = [cls for name, cls in inspect.getmembers(sys.modules['utils.models']) if inspect.isclass(cls) and
               hasattr(cls, '__tablename__')]
-nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, Genomic_variant, CohortProtein, CohortMetabolite,
+nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, GenomicVariant, CohortProtein, CohortMetabolite,
          CohortPhenotype]
 print(len(all_models))
 

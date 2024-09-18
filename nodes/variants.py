@@ -2,7 +2,7 @@ import pandas as pd
 
 from utils.query_nedrex import get_edge_associations
 from settings import DEBUG
-from utils.models import CohortVariant, Genomic_variant, EffectVariantProtein, EffectVariantMetabolite, \
+from utils.models import CohortVariant, GenomicVariant, EffectVariantProtein, EffectVariantMetabolite, \
     EffectVariantPhenotype, Variant_affects_gene, Gene, CohortReferencesVariant
 from nedrex.core import iter_nodes
 from utils.logger import get_logger
@@ -24,7 +24,7 @@ def read_rsid_chris(variant_data_path: str):
 
 
 def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
-    logger.debug(f"# of Genomic_variant IDs: {len(rs_id_from_cohort)}")
+    logger.debug(f"# of GenomicVariant IDs: {len(rs_id_from_cohort)}")
     no_ids = len(rs_id_from_cohort)
     rs_ids_with_alt_seq = set(zip(rs_id_from_cohort['rsid'], rs_id_from_cohort['alt']))
 
@@ -33,30 +33,27 @@ def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
     for node in iter_nodes('genomic_variant'):
         if genomic_variant_count >= no_ids:
             break
-        rs_id_genomic_variant = node['domainIds']
-        if len(rs_id_genomic_variant) > 1:
-            rs_id_genomic_variant = node['domainIds'][1].replace('dbsnp.', 'rs')
-        else:
-            continue
+
+        rs_id_variant = next((x.replace('dbsnp.', 'rs') for x in node['domainIds'] if 'dbsnp.' in x), None)
+
         alternate_sequence = node.get('alternativeSequence')
-        if (rs_id_genomic_variant, alternate_sequence) in rs_ids_with_alt_seq:
-            genomic_variant = Genomic_variant(
-                clinvar_id=str(node.get('primaryDomainId')),
-                alternativeSequence=str(node.get('alternativeSequence')),
-                chromosome=str(node.get('chromosome')),
-                dataSources=str(node.get('dataSources')),
-                xrefs=str(node.get('domainIds')),
-                position=str(node.get('position')),
-                referenceSequence=str(node.get('referenceSequence')),
-                type=str(node.get('type')),
-                variantType=str(node.get('variantType')),
+        if (rs_id_variant, alternate_sequence) in rs_ids_with_alt_seq:
+            genomic_variant = GenomicVariant(
+                clinvar_id=node.get('primaryDomainId'),
+                alternative_sequence=node.get('alternativeSequence'),
+                chromosome=node.get('chromosome'),
+                data_sources=node.get('dataSources'),
+                xrefs=node.get('domainIds'),
+                position=node.get('position'),
+                reference_sequence=node.get('referenceSequence'),
+                type=node.get('type'),
+                variant_type=node.get('variantType'),
                 observation_source=obs_source
             )
             found_genomic_variants.append(genomic_variant)
             genomic_variant_count += 1
-        if DEBUG:
-            if genomic_variant_count > 1000:
-                break
+        if DEBUG and genomic_variant_count > 1000:
+            break
 
     return found_genomic_variants
 
@@ -117,7 +114,6 @@ def read_variant_gwas_file(gwas_stats_path: str):
 
 
 def get_cohort_references_variant(session, obs_source):
-    genomic_variants = session.query(Genomic_variant).all()
     new_cohort_references_set = set()
     query_result = session.query(CohortVariant).all()
 
@@ -127,12 +123,12 @@ def get_cohort_references_variant(session, obs_source):
     desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
                 for genomic_variant in query_result}
 
-    for variant in genomic_variants:
-        variant_domain_ids = variant.xrefs.replace(",", "").replace("[", "").replace("]", "").replace("'", "").split()
+    for variant in session.query(GenomicVariant).all():
+        variant_domain_ids = variant.xrefs
         dbsnp_id = next((variant_id.replace("dbsnp.", "rs") for variant_id in variant_domain_ids
                          if "dbsnp." in variant_id), None)
         clinvar_id = variant.clinvar_id
-        alt_seq = variant.alternativeSequence
+        alt_seq = variant.alternative_sequence
 
         if (dbsnp_id, alt_seq) in existing_cohort_id:
             cohort_id = desc_map[f"{dbsnp_id}{alt_seq}"]

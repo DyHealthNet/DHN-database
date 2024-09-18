@@ -30,7 +30,7 @@ DB_EDGES = {
 }
 
 
-def load_files(file_path: str, sep="\t") -> pd.DataFrame|None:
+def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
     """
     Load the file from the given path as a pandas DataFrame
     :param file_path: str - path to the file

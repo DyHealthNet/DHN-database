@@ -91,17 +91,17 @@ class Metabolite(Base):
     observation_source = Column(String)
 
 
-class Genomic_variant(Base):
+class GenomicVariant(Base):
     __tablename__ = "genomic_variant"
     clinvar_id = Column(String, primary_key=True)
-    alternativeSequence = Column(String)
+    alternative_sequence = Column(String)
     chromosome = Column(String)
-    dataSources = Column(String)
-    xrefs = Column(String)
+    data_sources = Column(String)
+    xrefs = Column(ARRAY(String))
     position = Column(String)
-    referenceSequence = Column(String)
+    reference_sequence = Column(String)
     type = Column(String)
-    variantType = Column(String)
+    variant_type = Column(String)
     observation_source = Column(String)
 
 

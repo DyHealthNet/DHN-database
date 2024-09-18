@@ -231,7 +231,7 @@ def add_cohort_protein_data(session, data_path: str = None, obs_source: str = No
     logger.info(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_path: str = None,
+def add_cohort_variants(session, variant_meta_path: str = None, gwas_path: str = None,
                                 obs_source: str = None):
     cohort_variants = read_variant_meta_file(variant_meta_path)
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
@@ -244,16 +244,13 @@ def add_cohort_genomic_variants(session, variant_meta_path: str = None, gwas_pat
         return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
 
     rsids_ids = get_cohort_ids(CohortVariant)
-    protein_ids = get_cohort_ids(CohortProtein)
-    metabolite_ids = get_cohort_ids(CohortMetabolite)
-    phenotype_ids = get_cohort_ids(CohortPhenotype)
 
     variant_protein_filtered = {obj for obj in effect_variant_protein_set if
-                                obj.protein_id in protein_ids and obj.variant_id in rsids_ids}
+                                obj.protein_id in get_cohort_ids(CohortProtein) and obj.variant_id in rsids_ids}
     variant_metabolite_filtered = {obj for obj in effect_variant_metabolite_set if
-                                   obj.metabolite_id in metabolite_ids and obj.variant_id in rsids_ids}
+                                   obj.metabolite_id in get_cohort_ids(CohortMetabolite) and obj.variant_id in rsids_ids}
     variant_phenotype_filtered = {obj for obj in effect_variant_phenotype_set if
-                                  obj.phenotype_id in phenotype_ids and obj.variant_id in rsids_ids}
+                                  obj.phenotype_id in get_cohort_ids(CohortMetabolite) and obj.variant_id in rsids_ids}
 
     add_items(session, variant_metabolite_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
               bulk=True)
@@ -360,11 +357,11 @@ def add_metabolite_data(session, file_path: str = None, data_dir: str = '../data
 def add_genomic_variant_data(session, file_path: str = None, obs_source: str = None):
     rs_id_list = read_rsid_chris(file_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
-    add_items(session, variants_to_add, Genomic_variant, filter_args=['clinvar_id'])
+    add_items(session, variants_to_add, GenomicVariant, filter_args=['clinvar_id'])
     session.commit()
     logger.info(f"Added {len(variants_to_add)} genomic variants")
 
-    genomic_variant_ids = {str(row[0]) for row in db_session.query(Genomic_variant.clinvar_id).all()}
+    genomic_variant_ids = {str(row[0]) for row in db_session.query(GenomicVariant.clinvar_id).all()}
     genes_to_add, variant_affects_gene_to_add = add_variant_affects_gene(genomic_variant_ids, obs_source=obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
@@ -486,7 +483,7 @@ if __name__ == '__main__':
     add_layer_node(add_proteins, "cohort proteins", add_cohort_protein_data, session=db_session,
                    data_path=protein_data_path, obs_source=OBSERVATIONS)
 
-    add_layer_node(add_variants, "cohort genomic variants", add_cohort_genomic_variants, session=db_session,
+    add_layer_node(add_variants, "cohort genomic variants", add_cohort_variants, session=db_session,
                    variant_meta_path=genomic_variant_meta_path, gwas_path=gwas_stats_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
