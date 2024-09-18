@@ -1,4 +1,3 @@
-import inspect
 import sys
 
 from settings import *
@@ -7,7 +6,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
-from sqlalchemy import inspect as sql_inspect
 
 from nodes.variants import add_variant_affects_gene, get_cohort_references_variant
 from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions
@@ -231,37 +229,9 @@ def add_cohort_protein_data(session, data_path: str = None, obs_source: str = No
     logger.info(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_cohort_variants(session, variant_meta_path: str = None, gwas_path: str = None,
-                                obs_source: str = None):
+def add_cohort_variants(session, variant_meta_path: str = None, obs_source: str = None):
     cohort_variants = read_variant_meta_file(variant_meta_path)
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
-    session.commit()
-    logger.info(f"Found and successfully added {len(cohort_variants)} variants from cohort to db")
-    effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set = read_variant_gwas_file(
-        gwas_path)
-
-    def get_cohort_ids(model):
-        return {str(row[0]) for row in db_session.query(model.cohort_id).all()}
-
-    rsids_ids = get_cohort_ids(CohortVariant)
-
-    variant_protein_filtered = {obj for obj in effect_variant_protein_set if
-                                obj.protein_id in get_cohort_ids(CohortProtein) and obj.variant_id in rsids_ids}
-    variant_metabolite_filtered = {obj for obj in effect_variant_metabolite_set if
-                                   obj.metabolite_id in get_cohort_ids(CohortMetabolite) and obj.variant_id in rsids_ids}
-    variant_phenotype_filtered = {obj for obj in effect_variant_phenotype_set if
-                                  obj.phenotype_id in get_cohort_ids(CohortMetabolite) and obj.variant_id in rsids_ids}
-
-    add_items(session, variant_metabolite_filtered, EffectVariantMetabolite, ['metabolite_id', 'variant_id'],
-              bulk=True)
-    add_items(session, variant_phenotype_filtered, EffectVariantPhenotype, ['phenotype_id', 'variant_id'],
-              bulk=True)
-    add_items(session, variant_protein_filtered, EffectVariantProtein, ['protein_id', 'variant_id'], bulk=True)
-    session.commit()
-
-    logger.info(f"Added {len(variant_protein_filtered)} variant-protein associations, "
-                f"{len(variant_metabolite_filtered)} variant-metabolite associations, and "
-                f"{len(variant_phenotype_filtered)} variant-phenotype associations")
 
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
     add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
@@ -429,7 +399,7 @@ if __name__ == '__main__':
     pheno_data_path = PHENO_PATH
     metabo_data_path = METABOLITE_PATH
     edges_path = EDGES_PATH
-    genomic_variant_meta_path = GENOMIC_VARIANT_META_PATH
+    variant_meta_path = VARIANT_META_PATH
     gwas_stats_path = GWAS_STATS_PATH
     data_directory = DATA_DIR
 
@@ -445,7 +415,7 @@ if __name__ == '__main__':
     add_proteins = add_node_type(protein_data_path)
     add_phenotypes = add_node_type(pheno_data_path)
     add_metabolites = add_node_type(metabo_data_path)
-    add_variants = add_node_type(genomic_variant_meta_path, gwas_stats_path)
+    add_variants = add_node_type(variant_meta_path, gwas_stats_path)
 
     logger.info(f"Will add {'proteins, ' if add_proteins else ''}{'phenotypes, ' if add_phenotypes else ''}"
                 f"{'metabolites, ' if add_metabolites else ''}{'variants ' if add_variants else ''}to the db.")
@@ -453,7 +423,7 @@ if __name__ == '__main__':
     logger.info("Initialising Layer 2 of database\n")
 
     add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
-                   file_path=genomic_variant_meta_path, obs_source=OBSERVATIONS)
+                   file_path=variant_meta_path, obs_source=OBSERVATIONS)
 
     add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
                    file_path=pheno_data_path, obs_source=OBSERVATIONS)
@@ -484,11 +454,12 @@ if __name__ == '__main__':
                    data_path=protein_data_path, obs_source=OBSERVATIONS)
 
     add_layer_node(add_variants, "cohort genomic variants", add_cohort_variants, session=db_session,
-                   variant_meta_path=genomic_variant_meta_path, gwas_path=gwas_stats_path, obs_source=OBSERVATIONS)
+                   variant_meta_path=variant_meta_path, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
     logger.info("Adding calculated edges...")
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path,
+                         variant_meta_path, gwas_stats_path)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)

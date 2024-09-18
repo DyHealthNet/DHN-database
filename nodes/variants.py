@@ -2,8 +2,8 @@ import pandas as pd
 
 from utils.query_nedrex import get_edge_associations
 from settings import DEBUG
-from utils.models import CohortVariant, GenomicVariant, EffectVariantProtein, EffectVariantMetabolite, \
-    EffectVariantPhenotype, Variant_affects_gene, Gene, CohortReferencesVariant
+from utils.models import CohortVariant, GenomicVariant, EffectsVariantProtein, EffectsVariantMetabolite, \
+    EffectsVariantPhenotype, Variant_affects_gene, Gene, CohortReferencesVariant
 from nedrex.core import iter_nodes
 from utils.logger import get_logger
 
@@ -73,9 +73,6 @@ def read_variant_meta_file(variants_meta_path: str):
             xrefs=f"rsid.{row['rsid']}",
         )
         variant_set.add(new_variant)
-        if DEBUG:
-            if len(variant_set) > 10_000:
-                break
     return variant_set
 
 
@@ -88,9 +85,9 @@ def read_variant_gwas_file(gwas_stats_path: str):
     effect_variant_metabolite_set = set()
     effect_variant_phenotype_set = set()
 
-    variant_effect_type = {'pheno': (EffectVariantPhenotype, effect_variant_phenotype_set, "phenotype_id"),
-                           'prot': (EffectVariantProtein, effect_variant_protein_set, "protein_id"),
-                           'metab': (EffectVariantMetabolite, effect_variant_metabolite_set, "metabolite_id")}
+    variant_effect_type = {'pheno': (EffectsVariantPhenotype, effect_variant_phenotype_set, "phenotype_id"),
+                           'prot': (EffectsVariantProtein, effect_variant_protein_set, "protein_id"),
+                           'metab': (EffectsVariantMetabolite, effect_variant_metabolite_set, "metabolite_id")}
 
     for index, row in variants_meta_df.iterrows():
         if DEBUG and (len(effect_variant_phenotype_set) > 100 and

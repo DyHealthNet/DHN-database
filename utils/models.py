@@ -145,7 +145,7 @@ class CohortReferencesVariant(Base):
 
 
 # Calculated effects of cohort observations
-class EffectVariantProtein(Base):
+class EffectsVariantProtein(Base):
     __tablename__ = 'effects_variant_protein'
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
@@ -157,7 +157,7 @@ class EffectVariantProtein(Base):
     test_statistic = Column(String)
 
 
-class EffectVariantMetabolite(Base):
+class EffectsVariantMetabolite(Base):
     __tablename__ = 'effects_variant_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
@@ -169,7 +169,7 @@ class EffectVariantMetabolite(Base):
     test_statistic = Column(String)
 
 
-class EffectVariantPhenotype(Base):
+class EffectsVariantPhenotype(Base):
     __tablename__ = 'effects_variant_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))

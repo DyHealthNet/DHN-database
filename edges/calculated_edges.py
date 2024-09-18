@@ -21,12 +21,20 @@ DB_EDGES = {
     ('phenotype', 'protein'): (EffectsProteinPhenotype, 'phenotype_id', 'protein_id'),
     ('protein', 'metabolite'): (EffectsProteinMetabolite, 'protein_id', 'metabolite_id'),
     ('metabolite', 'protein'): (EffectsProteinMetabolite, 'metabolite_id', 'protein_id'),
+    ('protein', 'variant'): (EffectsVariantProtein, 'protein_id', 'variant_id'),
 
     ('metabolite', 'metabolite'): (EffectsMetaboliteMetabolite, 'metabolite_id_1', 'metabolite_id_2'),
     ('metabolite', 'phenotype'): (EffectsMetabolitePhenotype, 'metabolite_id', 'phenotype_id'),
     ('phenotype', 'metabolite'): (EffectsMetabolitePhenotype, 'phenotype_id', 'metabolite_id'),
+    ('metabolite', 'variant'): (EffectsVariantMetabolite, 'metabolite_id', 'variant_id'),
 
     ('phenotype', 'phenotype'): (EffectsPhenotypePhenotype, 'phenotype_id_1', 'phenotype_id_2'),
+    ('phenotype', 'variant'): (EffectsVariantPhenotype, 'phenotype_id', 'variant_id'),
+
+    ('variant', 'metabolite'): (EffectsVariantMetabolite, 'variant_id', 'metabolite_id'),
+    ('variant', 'protein'): (EffectsVariantProtein, 'variant_id', 'protein_id'),
+    ('variant', 'phenotype'): (EffectsVariantPhenotype, 'variant_id', 'phenotype_id'),
+    # ('variant', 'variant'): (EffectsVariantVariant, 'variant_id_1', 'variant_id_2'),
 }
 
 
@@ -42,6 +50,24 @@ def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
     return pd.read_csv(file_path, sep=sep)
 
 
+def load_extra(extra_paths: str, sep="\t") -> pd.DataFrame:
+    """
+    Load the extra files from the given paths as a dictionary of pandas DataFrames
+    :param extra_paths: str - path(s), separated by commas
+    :param sep: separator for the file
+    :return: dict of Pandas DataFrames
+    """
+    paths = extra_paths.split(',')
+    extra_files = []
+    for path in paths:
+        extra_files.append(load_files(path, sep))
+
+    assert all([extra_files[0].columns == file.columns for file in extra_files[1:]]), \
+        "Extra files do not have the same columns, invalid!"
+
+    return pd.concat(extra_files, ignore_index=True)
+
+
 def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     """
     Retrieve the set of unique labels from the given file, based on the data type (e.g. protein, metabolite, phenotype)
@@ -52,12 +78,7 @@ def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     """
     if not isinstance(label_file, pd.DataFrame):
         return set()
-    name_col = {
-        'protein': 'protein_id',
-        'metabolite': 'analyte_name',
-        'phenotype': 'label'
-    }
-    id_col = name_col[label_type]
+    id_col = COHORT_COLUMNS[label_type]['unique_id']
     # check that the label and id cols exist
     assert id_col in label_file.columns, f"ID column {id_col} not found in the file"
     return set(label_file[id_col].to_list())
@@ -92,7 +113,7 @@ def filter_exising_ids(session, column: str) -> list:
     return session.query(column).all()
 
 
-def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set) \
+def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set, variant_set: set) \
         -> tuple[tuple[str, str], tuple[str, str]] | tuple[None, None]:
     """
     Map the source and target of an edge to the appropriate data type given an id and the cohort sets
@@ -102,7 +123,8 @@ def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set)
     :param metabo_set: set of unique metabolite names from the cohort data
     :return: Tuple containing the mapped source and target, and their respective data types
     """
-    maps_and_types = [(protein_set, 'protein'), (pheno_set, 'phenotype'), (metabo_set, 'metabolite')]
+    maps_and_types = [(protein_set, 'protein'), (pheno_set, 'phenotype'),
+                      (metabo_set, 'metabolite'), (variant_set, 'variant')]
 
     mapped_source = mapped_target = source_type = target_type = None
 
@@ -125,8 +147,8 @@ def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set)
     return (mapped_source, mapped_target), (source_type, target_type)
 
 
-def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set) \
-        -> tuple[list, list]:
+def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
+                  variant_set: set) -> tuple[list, list]:
     """
     Process a chunk of edges by mapping and filtering the source and target of the edge, and creating SQLAlchemy objects
     that represent the edge to add to the database.
@@ -135,11 +157,12 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
     :param protein_set: set of unique protein IDs from the cohort data
     :param phenotype_set: set of unique phenotype labels from the cohort data
     :param metabolite_set: set of unique metabolite names from the cohort data
+    :param variant_set: set of unique variant IDs from the cohort data
     :return: Tuple containing the list of formatted edges and the list of edge types
     """
 
     def map_and_filter(edge):
-        mapped, types = map_edge(edge, protein_set, phenotype_set, metabolite_set)
+        mapped, types = map_edge(edge, protein_set, phenotype_set, metabolite_set, variant_set)
         return mapped, types if types else None
 
     # Apply the map_and_filter function to the chunk
@@ -190,7 +213,8 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
     return formatted_edges_list, [edge.__class__ for edge in formatted_edges_list]
 
 
-def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set) -> None:
+def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
+                 variant_set: set) -> None:
     """
     Format the edges and add them to the database in chunks. Deletes the formatted edges after adding them to the
     database to save memory. The chunk size can be adjusted in the settings.
@@ -199,9 +223,10 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
     :param protein_set: set of unique protein IDs from the cohort data
     :param phenotype_set: set of unique phenotype labels from the cohort data
     :param metabolite_set: set of unique metabolite names from the cohort data
+    :param variant_set: set of unique variant IDs from the cohort data
     :return: None
     """
-    all_edge_types = {}
+    all_edge_types = {edge_type[0]: 0 for edge_type in DB_EDGES.values()}
     num_edge_types = {}
     chunk_size = CHUNK_SIZE
     num_chunks = (len(edges) // chunk_size) + 1
@@ -217,7 +242,8 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
         edges_chunk = edges.iloc[start_index:end_index]
 
         # Process the current chunk
-        formatted_edges_list, edge_types = process_chunk(edges_chunk, protein_set, phenotype_set, metabolite_set)
+        formatted_edges_list, edge_types = process_chunk(edges_chunk, protein_set, phenotype_set,
+                                                         metabolite_set, variant_set)
 
         add_success = add_edges(session, formatted_edges_list)
         del formatted_edges_list
@@ -227,11 +253,11 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
         logger.info(f"Chunk {i + 1}/{num_chunks} added successfully")
         # do the value counts of the edges and add them to a running total
         chunk_edge_types = pd.Series(edge_types).value_counts().to_dict()
-        num_edge_types = {edge_type: num_edge_types + chunk_edge_types.get(edge_type, 0)
-                          for edge_type, num_edge_types in all_edge_types.items()}
+        num_edge_types = {edge_type: num_edge_types_value + chunk_edge_types.get(edge_type, 0)
+                          for edge_type, num_edge_types_value in all_edge_types.items()}
 
     for edge_type, count in num_edge_types.items():
-        logger.info(f"Added {count} edges of type {edge_type}")
+        logger.debug(f"Added {count} edges of type {edge_type.__name__}")
     return
 
 
@@ -252,7 +278,12 @@ def add_edges(session, edges: list[Base]) -> bool:
     return True
 
 
-def add_calculated_edges(session, edges_path: str, pheno_data_path: str, protein_data_path: str, metabo_data_path: str):
+def add_calculated_edges(session, edges_path: str,
+                         pheno_data_path: str | None,
+                         protein_data_path: str | None,
+                         metabo_data_path: str | None,
+                         variant_data_path: str | None,
+                         extra_edge_paths: str | None = None) -> None:
     """
     Main function to add the calculated edges to the database.
     :param session: SQLAlchemy session
@@ -260,20 +291,30 @@ def add_calculated_edges(session, edges_path: str, pheno_data_path: str, protein
     :param pheno_data_path: str - path to the phenotype data file
     :param protein_data_path: str - path to the protein data file
     :param metabo_data_path: str - path to the metabolite data file
+    :param variant_data_path: str - path to the variant data file
+    :param extra_edge_paths: str - path to the extra data files (e.g. variant edges)
     :return: None
     """
     phenotypes = load_files(pheno_data_path)
     proteins = load_files(protein_data_path)
     metabolites = load_files(metabo_data_path)
+    variants = load_files(variant_data_path)
+
     edges = load_files(edges_path, sep=",")
+    edges = edges.iloc[:, 1:]  # removing unnamed column
+    if extra_edge_paths:
+        logger.debug("Loading extra data files")
+        extra_data = load_extra(extra_edge_paths)
+        edges = pd.concat([edges, extra_data], ignore_index=True)
 
     # get base labels
     pheno_set = get_labels(phenotypes, 'phenotype')
     protein_set = get_labels(proteins, 'protein')
     metabo_set = get_labels(metabolites, 'metabolite')
+    variant_set = get_labels(variants, 'variant')
     logger.debug("All cohort sets loaded successfully")
 
-    format_edges(session, edges, protein_set, pheno_set, metabo_set)
+    format_edges(session, edges, protein_set, pheno_set, metabo_set, variant_set)
     # formatted_edges = format_edges(edges[edges['pval'] <= 0.05], protein_set, pheno_map, metabo_map, disorder_map)
 
 
@@ -294,5 +335,7 @@ if __name__ == '__main__':
     pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
     protein_data_path = None
     metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    variant_data_path = None
 
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path)
+    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path,
+                         metabo_data_path, variant_data_path)
