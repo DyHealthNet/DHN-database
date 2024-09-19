@@ -58,24 +58,6 @@ def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
     return found_genomic_variants
 
 
-def read_variant_meta_file(variants_meta_path: str):
-    """
-    reads Protein IDs from Chris dataset
-    """
-    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
-    logger.debug("Iterating through gwas file")
-    variant_set = set()
-    for index, row in variants_meta_df.iterrows():
-        new_variant = CohortVariant(
-            cohort_id=f"{row['chrom']}:{row['pos']}:{row['ref']}>{row['alt']}",
-            description=row['rsid'],
-            display_name=f"{row['chrom']}:{row['pos']}:{row['ref']}>{row['alt']}",
-            xrefs=f"rsid.{row['rsid']}",
-        )
-        variant_set.add(new_variant)
-    return variant_set
-
-
 def read_variant_gwas_file(gwas_stats_path: str):
     """
     reads Protein IDs from Chris dataset
@@ -108,34 +90,6 @@ def read_variant_gwas_file(gwas_stats_path: str):
         effect_set.add(new_effect)
 
     return effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set
-
-
-def get_cohort_references_variant(session, obs_source):
-    new_cohort_references_set = set()
-    query_result = session.query(CohortVariant).all()
-
-    existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
-                          for genomic_variant in query_result}
-
-    desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
-                for genomic_variant in query_result}
-
-    for variant in session.query(GenomicVariant).all():
-        variant_domain_ids = variant.xrefs
-        dbsnp_id = next((variant_id.replace("dbsnp.", "rs") for variant_id in variant_domain_ids
-                         if "dbsnp." in variant_id), None)
-        clinvar_id = variant.clinvar_id
-        alt_seq = variant.alternative_sequence
-
-        if (dbsnp_id, alt_seq) in existing_cohort_id:
-            cohort_id = desc_map[f"{dbsnp_id}{alt_seq}"]
-            new_cohort_references_variant = CohortReferencesVariant(
-                cohort_id=cohort_id,
-                clinvar_id=clinvar_id
-            )
-            new_cohort_references_set.add(new_cohort_references_variant)
-
-    return new_cohort_references_set
 
 
 def add_variant_affects_gene(clinvar_ids: set[str], obs_source: str = "external"):

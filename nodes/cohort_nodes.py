@@ -1,6 +1,8 @@
+import timeit
+
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
-                          CohortReferencesMetabolite, CohortReferencesProtein, CohortReferencesPhenotype,
-                          CohortReferencesDisease)
+                          CohortVariant, CohortReferencesVariant, GenomicVariant, CohortReferencesMetabolite,
+                          CohortReferencesProtein, CohortReferencesPhenotype, CohortReferencesDisease)
 from settings import COHORT_COLUMNS
 from utils.logger import get_logger
 import pandas as pd
@@ -63,8 +65,8 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
             else:
                 missing.add(snomed_id)
 
-    logger.info(f"Some SNOMED ids could not be mapped {list(missing)[:min(len(missing)-1,5)]} "
-                f"and {max(len(missing)-5, 0)} more")
+    logger.info(f"Some SNOMED ids could not be mapped {list(missing)[:min(len(missing) - 1, 5)]} "
+                f"and {max(len(missing) - 5, 0)} more")
     return phenotypes_to_add, disorder_references_to_add, phenotype_references_to_add
 
 
@@ -101,8 +103,8 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
             else:
                 missing.add(hmdb_id)
 
-    logger.info(f"Some HMDB IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
-                f"and {max(len(missing)-5, 0)} more")
+    logger.info(f"Some HMDB IDs could not be mapped: {list(missing)[:min(len(missing) - 1, 5)]} "
+                f"and {max(len(missing) - 5, 0)} more")
     return metabolites_to_add, references_to_add
 
 
@@ -135,6 +137,55 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
             else:
                 missing.add(uniprot_id)
 
-    logger.info(f"Some UniProt IDs could not be mapped: {list(missing)[:min(len(missing)-1,5)]} "
-                f"and {max(len(missing)-5, 0)} more")
+    logger.info(f"Some UniProt IDs could not be mapped: {list(missing)[:min(len(missing) - 1, 5)]} "
+                f"and {max(len(missing) - 5, 0)} more")
     return proteins_to_add, references_to_add
+
+
+def cohort_variant_data(variants_meta_path: str):
+    """
+    reads Protein IDs from Chris dataset
+    """
+    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
+    unique_id, dp_name, desc, xrefs = get_cols('variant')
+    start = timeit.default_timer()
+
+    def create_variant(row):
+        return CohortVariant(
+            cohort_id=row[unique_id],
+            description=row[desc],
+            display_name=row[dp_name],
+            xrefs=f"rsid.{row[xrefs]}"
+        )
+
+    variant_set = set(variants_meta_df.apply(create_variant, axis=1))
+    logger.debug(f"Time taken to process variants: {timeit.default_timer() - start}")
+    return variant_set
+
+
+def get_cohort_references_variant(session, obs_source):
+    new_cohort_references_set = set()
+    query_result = session.query(CohortVariant).all()
+
+    existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
+                          for genomic_variant in query_result}
+
+    desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
+                for genomic_variant in query_result}
+
+    for variant in session.query(GenomicVariant).all():
+        variant_domain_ids = variant.xrefs
+        dbsnp_id = next((variant_id.replace("dbsnp.", "rs") for variant_id in variant_domain_ids
+                         if "dbsnp." in variant_id), None)
+        clinvar_id = variant.clinvar_id
+        alt_seq = variant.alternative_sequence
+
+        if (dbsnp_id, alt_seq) in existing_cohort_id:
+            cohort_id = desc_map[f"{dbsnp_id}{alt_seq}"]
+            new_cohort_references_variant = CohortReferencesVariant(
+                cohort_id=cohort_id,
+                clinvar_id=clinvar_id
+            )
+            new_cohort_references_set.add(new_cohort_references_variant)
+
+    return new_cohort_references_set

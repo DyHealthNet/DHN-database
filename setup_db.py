@@ -7,10 +7,8 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
 
-from nodes.variants import add_variant_affects_gene, get_cohort_references_variant
 from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions
-from nodes.variants import get_genomic_variant_nodes, read_rsid_chris, read_variant_meta_file, \
-    read_variant_gwas_file
+from nodes.variants import get_genomic_variant_nodes, read_rsid_chris, add_variant_affects_gene
 from nodes.metabolites import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from nodes.phenotypes import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo, \
@@ -230,7 +228,7 @@ def add_cohort_protein_data(session, data_path: str = None, obs_source: str = No
 
 
 def add_cohort_variants(session, variant_meta_path: str = None, obs_source: str = None):
-    cohort_variants = read_variant_meta_file(variant_meta_path)
+    cohort_variants = cohort_variant_data(variant_meta_path)
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
 
     cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
@@ -400,7 +398,7 @@ if __name__ == '__main__':
     metabo_data_path = METABOLITE_PATH
     edges_path = EDGES_PATH
     variant_meta_path = VARIANT_META_PATH
-    gwas_stats_path = GWAS_STATS_PATH
+    gwas_stats_path = EXTRA_EDGES
     data_directory = DATA_DIR
 
     if not all([edges_path, data_directory]):

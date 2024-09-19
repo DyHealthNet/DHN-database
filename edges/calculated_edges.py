@@ -60,6 +60,9 @@ def load_extra(extra_paths: str, sep="\t") -> pd.DataFrame:
     paths = extra_paths.split(',')
     extra_files = []
     for path in paths:
+        if not os.path.exists(path):
+            logger.error(f"Extra file {path} does not exist, skipping...")
+            continue
         extra_files.append(load_files(path, sep))
 
     assert all([extra_files[0].columns == file.columns for file in extra_files[1:]]), \
