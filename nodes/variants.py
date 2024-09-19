@@ -10,23 +10,19 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def read_rsid_chris(variant_data_path: str):
+def read_rsid_chris(variant_data_path: str) -> set[tuple[str, str]]:
     """
-    reads Protein IDs from CHRIS dataset
+    reads variant IDs from CHRIS dataset
     """
     df = pd.read_csv(variant_data_path, sep='\t')
-    # check how many nans in the uniprot ocl
     logger.debug(f"Number of nans in variant col: {df['rsid'].isna().sum()}")
     df['rsid'] = df['rsid'].fillna('')
-
-    rs_id_list = df[['rsid', 'pos', 'ref', 'alt']]
-    return rs_id_list
+    return set(zip(df['rsid'], df['alt']))
 
 
-def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
-    logger.debug(f"# of GenomicVariant IDs: {len(rs_id_from_cohort)}")
+def get_genomic_variant_nodes(rs_id_from_cohort: set, obs_source: str) -> list[GenomicVariant]:
+    logger.debug(f"# of Genomic Variant IDs: {len(rs_id_from_cohort)}")
     no_ids = len(rs_id_from_cohort)
-    rs_ids_with_alt_seq = set(zip(rs_id_from_cohort['rsid'], rs_id_from_cohort['alt']))
 
     found_genomic_variants = []
     genomic_variant_count = 0
@@ -37,7 +33,7 @@ def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
         rs_id_variant = next((x.replace('dbsnp.', 'rs') for x in node['domainIds'] if 'dbsnp.' in x), None)
 
         alternate_sequence = node.get('alternativeSequence')
-        if (rs_id_variant, alternate_sequence) in rs_ids_with_alt_seq:
+        if (rs_id_variant, alternate_sequence) in rs_id_from_cohort:
             genomic_variant = GenomicVariant(
                 clinvar_id=node.get('primaryDomainId'),
                 alternative_sequence=node.get('alternativeSequence'),
@@ -58,40 +54,6 @@ def get_genomic_variant_nodes(rs_id_from_cohort: pd.DataFrame, obs_source: str):
     return found_genomic_variants
 
 
-def read_variant_gwas_file(gwas_stats_path: str):
-    """
-    reads Protein IDs from Chris dataset
-    """
-    variants_meta_df = pd.read_csv(gwas_stats_path, sep='\t', dtype=str)
-    effect_variant_protein_set = set()
-    effect_variant_metabolite_set = set()
-    effect_variant_phenotype_set = set()
-
-    variant_effect_type = {'pheno': (EffectsVariantPhenotype, effect_variant_phenotype_set, "phenotype_id"),
-                           'prot': (EffectsVariantProtein, effect_variant_protein_set, "protein_id"),
-                           'metab': (EffectsVariantMetabolite, effect_variant_metabolite_set, "metabolite_id")}
-
-    for index, row in variants_meta_df.iterrows():
-        if DEBUG and (len(effect_variant_phenotype_set) > 100 and
-                      len(effect_variant_metabolite_set) > 100 and
-                      len(effect_variant_protein_set) > 100):
-            break
-        effect_type = row['type']
-        effect_class, effect_set, id_type = variant_effect_type[effect_type]
-
-        effect_values = {id_type: row['label2'],
-                         'variant_id': row['label1'].replace("chr", ""),
-                         'p_value': float(row['pval']),
-                         'effect_size': float(row['effsize']),
-                         'effect_size_type': row['effsize_type'],
-                         'test_statistic': row['test']}
-
-        new_effect = effect_class(**effect_values)
-        effect_set.add(new_effect)
-
-    return effect_variant_protein_set, effect_variant_metabolite_set, effect_variant_phenotype_set
-
-
 def add_variant_affects_gene(clinvar_ids: set[str], obs_source: str = "external"):
     variant_affects_gene_graph = get_edge_associations(node_ids=clinvar_ids, edge_type='variant_affects_gene',
                                                        direction='directed')
@@ -102,25 +64,26 @@ def add_variant_affects_gene(clinvar_ids: set[str], obs_source: str = "external"
     for edge in variant_affects_gene_graph.edges(data=True):
         variant_affects_gene_dict[edge[0]] = edge[1]
         variant_edge_list.append(edge)
-        sourceDomainId = edge[0]
-        targedDomainId = edge[1]
-        id_list_total.append(sourceDomainId)
+        source_domain_id = edge[0]
+        targed_domain_id = edge[1]
+        id_list_total.append(source_domain_id)
         id_list_total.append(
-            targedDomainId)  # because graph is directed either first or second entry contains the entrez id
+            targed_domain_id)  # because graph is directed either first or second entry contains the entrez id
 
-        if sourceDomainId.startswith("entrez."):
-            entrez_id = sourceDomainId
-            variant = targedDomainId
-        if targedDomainId.startswith("entrez."):
-            entrez_id = targedDomainId
-            variant = sourceDomainId
+        if source_domain_id.startswith("entrez."):
+            entrez_id = source_domain_id
+            variant = targed_domain_id
+        elif targed_domain_id.startswith("entrez."):
+            entrez_id = targed_domain_id
+            variant = source_domain_id
+        else:
+            continue
         variant_affects_gene_edge = Variant_affects_gene(clinvar_id=variant,
                                                          entrez_id=entrez_id)
         variant_affects_gene_to_add.add(variant_affects_gene_edge)
 
-    genomic_variant_node_generator = iter_nodes('gene')
     genes_to_add = set()
-    for node in genomic_variant_node_generator:
+    for node in iter_nodes('gene'):
         if node['primaryDomainId'] in id_list_total:
             new_gene = Gene(entrez_id=node['primaryDomainId'],
                             display_name=node['displayName'],
