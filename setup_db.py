@@ -1,6 +1,6 @@
 import sys
 
-from settings import *
+from utils.settings import *
 from nodes.cohort_nodes import *
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker

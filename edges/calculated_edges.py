@@ -8,10 +8,9 @@
 import pandas as pd
 
 from utils.models import *
-from utils.logger import get_logger
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import sessionmaker
-from settings import *
+from utils.settings import *
 
 logger = get_logger(__name__)
 

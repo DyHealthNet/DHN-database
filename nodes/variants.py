@@ -1,9 +1,8 @@
 import pandas as pd
 
 from utils.query_nedrex import get_edge_associations
-from settings import DEBUG
-from utils.models import CohortVariant, GenomicVariant, EffectsVariantProtein, EffectsVariantMetabolite, \
-    EffectsVariantPhenotype, Variant_affects_gene, Gene, CohortReferencesVariant
+from utils.settings import DEBUG
+from utils.models import GenomicVariant, Variant_affects_gene, Gene
 from nedrex.core import iter_nodes
 from utils.logger import get_logger
 

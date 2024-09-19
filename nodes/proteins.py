@@ -1,11 +1,9 @@
-import json
 import pandas as pd
-import requests
 from utils.query_nedrex import get_edge_associations
 from nedrex.core import iter_nodes
 from utils.models import Protein, ProteinAssocProtein
 from utils.logger import get_logger
-from settings import DEBUG
+from utils.settings import DEBUG
 
 logger = get_logger(__name__)
 

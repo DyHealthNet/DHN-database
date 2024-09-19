@@ -1,7 +1,7 @@
 import os.path
 import pandas as pd
 import xml.etree.ElementTree as ET
-from settings import DEBUG
+from utils.settings import DEBUG
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

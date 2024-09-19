@@ -3,7 +3,7 @@ import timeit
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
                           CohortVariant, CohortReferencesVariant, GenomicVariant, CohortReferencesMetabolite,
                           CohortReferencesProtein, CohortReferencesPhenotype, CohortReferencesDisease)
-from settings import COHORT_COLUMNS
+from utils.settings import COHORT_COLUMNS
 from utils.logger import get_logger
 import pandas as pd
 
@@ -163,7 +163,7 @@ def cohort_variant_data(variants_meta_path: str):
     return variant_set
 
 
-def get_cohort_references_variant(session, obs_source):
+def get_cohort_references_variant(session, obs_source: str):
     new_cohort_references_set = set()
     query_result = session.query(CohortVariant).all()
 
