@@ -76,7 +76,6 @@ class Protein(Base):
     uniprot_id = Column(String, primary_key=True)
     display_name = Column(String)
     sequence = Column(String)
-    gene_entrez_id = Column(String)
     description = Column(String)
     observation_source = Column(String)
 
@@ -277,7 +276,14 @@ class ProteinAssocProtein(Base):
     uniprot_id_2 = Column(String, ForeignKey('protein.uniprot_id'))
 
 
-class Variant_affects_gene(Base):
+class ProteinAssocGene(Base):
+    __tablename__ = 'protein_associates_gene'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uniprot_id = Column(String, ForeignKey('protein.uniprot_id'))
+    entrez_id = Column(String, ForeignKey('gene.entrez_id'))
+
+
+class VariantAssocGene(Base):
     __tablename__ = 'variant_associates_gene'
     id = Column(Integer, primary_key=True, autoincrement=True)
     clinvar_id = Column(String, ForeignKey('genomic_variant.clinvar_id'))

@@ -1,44 +1,44 @@
 import pandas as pd
-from utils.query_nedrex import get_edge_associations
+from utils.query_nedrex import get_edge_associations, get_gene_data
 from nedrex.core import iter_nodes
-from utils.models import Protein, ProteinAssocProtein
+from utils.models import Protein, ProteinAssocProtein, ProteinAssocGene, Gene
 from utils.logger import get_logger
 from utils.settings import DEBUG
 
 logger = get_logger(__name__)
 
 
-def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) -> tuple[list[Protein], set[str]]:
+def get_protein_nodes(uniprot_ids: set[str] = None, observation_source: str = None) \
+        -> tuple[set[Protein], set[tuple]]:
     logger.debug(f"UniProt IDs: {len(uniprot_ids)}")
-    protein_set = []
-    found_proteins = set()
+    proteins = set()
+    protein_assoc_genes = set()
     uniprot_ids = {f"uniprot.{uniprot_id}" for uniprot_id in uniprot_ids}
     for node in iter_nodes('protein'):
         # Remove the 'uniprot.' prefix from node primaryDomainId
         primary_domain_id = node['primaryDomainId']
         if primary_domain_id in uniprot_ids:
             protein = Protein(
-                uniprot_id=str(primary_domain_id),
+                uniprot_id=primary_domain_id,
                 display_name=f"{node.get('displayName').split('_')[0]}",  # Remove the species from the display name
-                gene_entrez_id=str(node.get('geneName')),
-                sequence=str(node.get('sequence')),
-                description=str(node.get('comments')),
+                sequence=node.get('sequence'),
+                description=node.get('comments'),
                 observation_source=observation_source
             )
-            protein_set.append(protein)
-            found_proteins.add(primary_domain_id)
+            protein_assoc_genes.add((primary_domain_id, node.get('geneName')))
+            proteins.add(protein)
         if DEBUG:
-            if len(protein_set) > 100:
+            if len(proteins) > 100:
                 break
 
-    return protein_set, found_proteins
+    return proteins, protein_assoc_genes
 
 
-def read_protein_id_chris(proteinID_path: str):
+def read_protein_id_chris(protein_id_path: str):
     """
     reads Protein IDs from Chris dataset
     """
-    df = pd.read_csv(proteinID_path, sep='\t')
+    df = pd.read_csv(protein_id_path, sep='\t')
     # check how many nans in the uniprot ocl
     logger.debug(f"Number of nans in UniProt col: {df['UniProt'].isna().sum()}")
     df['UniProt'] = df['UniProt'].fillna('')
@@ -47,16 +47,16 @@ def read_protein_id_chris(proteinID_path: str):
     return uniprot_ids
 
 
-def get_protein_interactions(proteinIds):
+def get_protein_interactions(protein_ids):
     # prefixed_proteinIds = {f"uniprot.{entry}" for entry in proteinIds}
     # retrieve_interacting_proteins_neo4j(proteinIds)
-    assoc_graph = get_edge_associations(proteinIds, edge_type='protein_interacts_with_protein',
+    assoc_graph = get_edge_associations(protein_ids, edge_type='protein_interacts_with_protein',
                                         direction='undirected')
     protein_interactions = []
     for edge in assoc_graph.edges():
         uniprot_id_member_one = edge[0]
         uniprot_id_member_two = edge[1]
-        if uniprot_id_member_two in proteinIds and uniprot_id_member_one in proteinIds:
+        if uniprot_id_member_two in protein_ids and uniprot_id_member_one in protein_ids:
             protein_interactions.append(ProteinAssocProtein(uniprot_id_1=uniprot_id_member_one,
                                                             uniprot_id_2=uniprot_id_member_two))
     return protein_interactions

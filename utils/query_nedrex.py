@@ -30,15 +30,16 @@ def get_phenotype_data(hpo_ids: set[str]) -> list[dict]:
     return [node for node in iter_nodes('phenotype') if node['primaryDomainId'] in hpo_ids]
 
 
-def get_gene_data(entrez_ids: set[str] = None) -> list[dict]:
+def get_gene_data(entrez_ids: set[str] = None, search_col: str = 'primaryDomainId') -> list[dict]:
     """
     Fetches gene data from nedrex for a set of entrez ids
     :param entrez_ids: set of entrez ids to fetch data for
+    :param search_col: column to search for entrez ids
     :return: list of dictionaries with gene data
     """
     if not entrez_ids:
         return [node for node in iter_nodes('gene')]
-    return [node for node in iter_nodes('gene') if node['primaryDomainId'] in entrez_ids]
+    return [node for node in iter_nodes('gene') if node[search_col] in entrez_ids]
 
 
 def get_harmonizome_data(mondo_id: str) -> dict | None:

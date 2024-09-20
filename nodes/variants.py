@@ -2,7 +2,7 @@ import pandas as pd
 
 from utils.query_nedrex import get_edge_associations
 from utils.settings import DEBUG
-from utils.models import GenomicVariant, Variant_affects_gene, Gene
+from utils.models import GenomicVariant, VariantAssocGene, Gene
 from nedrex.core import iter_nodes
 from utils.logger import get_logger
 
@@ -77,7 +77,7 @@ def add_variant_affects_gene(clinvar_ids: set[str], obs_source: str = "external"
             variant = source_domain_id
         else:
             continue
-        variant_affects_gene_edge = Variant_affects_gene(clinvar_id=variant,
+        variant_affects_gene_edge = VariantAssocGene(clinvar_id=variant,
                                                          entrez_id=entrez_id)
         variant_affects_gene_to_add.add(variant_affects_gene_edge)
 

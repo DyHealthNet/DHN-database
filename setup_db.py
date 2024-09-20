@@ -8,6 +8,7 @@ from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
 
 from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions
+from nodes.genes import gene_associations
 from nodes.variants import get_genomic_variant_nodes, read_rsid_chris, add_variant_affects_gene
 from nodes.metabolites import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
@@ -242,15 +243,25 @@ def add_protein_data(session, file_path: str = None, obs_source: str = None, mis
         protein_ids = read_protein_id_chris(file_path)
     else:
         protein_ids = missing_ids
-    protein_nodes, found_proteins = get_protein_nodes(protein_ids, obs_source)
+    protein_nodes, protein_gene_map = get_protein_nodes(protein_ids, obs_source)
+
+    # get genes not yet in the database
+    existing = set(session.query(Gene).filter(Gene.display_name.in_({x[1] for x in protein_gene_map})).all())
+    missing = {x[1] for x in protein_gene_map} - {x.entrez_id for x in existing}
+    additional_genes, associations = gene_associations(protein_gene_map, {x.display_name: x.entrez_id for x in existing}, missing)
+    logger.debug(f"Adding {len(additional_genes)} missing genes to the database for {len(associations)} associations")
+
     needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in protein_ids}
+    found_proteins = {x.uniprot_id for x in protein_nodes}
     logger.info(f"Proteins that couldn't be found: {list(needed_ids - found_proteins)[:5]} and "
                 f"{len(needed_ids - found_proteins) - 5} more")
 
     available_proteins = {x.uniprot_id for x in protein_nodes}
     logger.debug(f"Got {len(protein_nodes)} protein nodes")
     protein_interactions = get_protein_interactions(available_proteins)
+    add_items(session, additional_genes, Gene, ['entrez_id'])
     add_items(session, protein_nodes, Protein, ['uniprot_id'])
+    add_items(session, associations, ProteinAssocGene, ['uniprot_id', 'entrez_id'])
     add_items(session, protein_interactions, ProteinAssocProtein, ['id'])
     session.commit()
 
@@ -335,7 +346,7 @@ def add_genomic_variant_data(session, file_path: str = None, obs_source: str = N
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     session.commit()
 
-    add_items(session, variant_affects_gene_to_add, Variant_affects_gene, filter_args=['entrez_id', 'clinvar_id'])
+    add_items(session, variant_affects_gene_to_add, VariantAssocGene, filter_args=['entrez_id', 'clinvar_id'])
     session.commit()
     session.commit()
     logger.info("Added variant affects gene edges")
@@ -420,14 +431,14 @@ if __name__ == '__main__':
 
     logger.info("Initialising Layer 2 of database\n")
 
-    add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
-                   file_path=variant_meta_path, obs_source=OBSERVATIONS)
-
-    add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
-                   file_path=pheno_data_path, obs_source=OBSERVATIONS)
-
-    add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
-                   file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    # add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
+    #                file_path=variant_meta_path, obs_source=OBSERVATIONS)
+    #
+    # add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
+    #                file_path=pheno_data_path, obs_source=OBSERVATIONS)
+    #
+    # add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
+    #                file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
                    file_path=protein_data_path, obs_source=OBSERVATIONS)
