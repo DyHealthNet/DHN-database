@@ -431,14 +431,14 @@ if __name__ == '__main__':
 
     logger.info("Initialising Layer 2 of database\n")
 
-    # add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
-    #                file_path=variant_meta_path, obs_source=OBSERVATIONS)
-    #
-    # add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
-    #                file_path=pheno_data_path, obs_source=OBSERVATIONS)
-    #
-    # add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
-    #                file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+    add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
+                   file_path=variant_meta_path, obs_source=OBSERVATIONS)
+
+    add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
+                   file_path=pheno_data_path, obs_source=OBSERVATIONS)
+
+    add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
+                   file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
                    file_path=protein_data_path, obs_source=OBSERVATIONS)
