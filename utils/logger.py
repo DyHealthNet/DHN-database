@@ -22,7 +22,7 @@ def get_logger(name: str):
             '[%(asctime)s] [%(name)s] [%(levelname)s]: %(message)s'
         ))
 
-        file_handler = logging.FileHandler('db_setup.log')
+        file_handler = logging.FileHandler('db_setup.log', mode='w')
         file_handler.setFormatter(logging.Formatter(
             '[%(asctime)s] [%(name)s] [%(levelname)s]: %(message)s'
         ))

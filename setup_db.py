@@ -20,6 +20,8 @@ from utils.query_nedrex import domain_id_to_mondo, get_disorder_data, get_edge_a
     get_phenotype_data
 from utils.database_views import add_views, add_indexes
 from utils.logger import get_logger
+from analysis.graph_vis import main as graph_vis
+from analysis.analyse_db import main as db_stats
 
 logger = get_logger(__name__)
 
@@ -404,27 +406,20 @@ if __name__ == '__main__':
     dotenv.load_dotenv()
     metadata = MetaData()
     create_tables()
-    protein_data_path = PROTEIN_PATH
-    pheno_data_path = PHENO_PATH
-    metabo_data_path = METABOLITE_PATH
-    edges_path = EDGES_PATH
-    variant_meta_path = VARIANT_META_PATH
-    gwas_stats_path = EXTRA_EDGES
-    data_directory = DATA_DIR
 
-    if not all([edges_path, data_directory]):
+    if not all([EDGES_PATH, DATA_DIR]):
         logger.error("Please provide paths to the edges file and data directory.")
         sys.exit(1)
 
-    if not all([os.path.exists(x) for x in [edges_path, data_directory]]):
+    if not all([os.path.exists(x) for x in [EDGES_PATH, DATA_DIR]]):
         logger.error("Please provide valid paths to the data files.")
         sys.exit(1)
 
     # returns bool if the node type should be added or not
-    add_proteins = add_node_type(protein_data_path)
-    add_phenotypes = add_node_type(pheno_data_path)
-    add_metabolites = add_node_type(metabo_data_path)
-    add_variants = add_node_type(variant_meta_path, gwas_stats_path)
+    add_proteins = add_node_type(PROTEIN_PATH)
+    add_phenotypes = add_node_type(PHENO_PATH)
+    add_metabolites = add_node_type(METABOLITE_PATH)
+    add_variants = add_node_type(VARIANT_META_PATH, EXTRA_EDGES)
 
     logger.info(f"Will add {'proteins, ' if add_proteins else ''}{'phenotypes, ' if add_phenotypes else ''}"
                 f"{'metabolites, ' if add_metabolites else ''}{'variants ' if add_variants else ''}to the db.")
@@ -432,43 +427,43 @@ if __name__ == '__main__':
     logger.info("Initialising Layer 2 of database\n")
 
     add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
-                   file_path=variant_meta_path, obs_source=OBSERVATIONS)
+                   file_path=VARIANT_META_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
-                   file_path=pheno_data_path, obs_source=OBSERVATIONS)
+                   file_path=PHENO_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
-                   file_path=pheno_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+                   file_path=PHENO_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
-                   file_path=protein_data_path, obs_source=OBSERVATIONS)
+                   file_path=PROTEIN_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_metabolites, "metabolites", add_metabolite_data, session=db_session,
-                   file_path=metabo_data_path, obs_source=OBSERVATIONS, data_dir=data_directory)
+                   file_path=METABOLITE_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
 
     # second pass for phenotypes
     if add_phenotypes:
         logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
-        add_phenotype_data(db_session, pheno_data_path, obs_source='external', data_dir=data_directory)
+        add_phenotype_data(db_session, PHENO_PATH, obs_source='external', data_dir=DATA_DIR)
 
     logger.info("Initialising Layer 1 of database\n")
 
     add_layer_node(add_phenotypes, "cohort phenotypes", add_cohort_phenotype_data, session=db_session,
-                   data_path=pheno_data_path, obs_source=OBSERVATIONS)
+                   data_path=PHENO_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_metabolites, "cohort metabolites", add_cohort_metabolite_data, session=db_session,
-                   data_path=metabo_data_path, obs_source=OBSERVATIONS)
+                   data_path=METABOLITE_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_proteins, "cohort proteins", add_cohort_protein_data, session=db_session,
-                   data_path=protein_data_path, obs_source=OBSERVATIONS)
+                   data_path=PROTEIN_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_variants, "cohort genomic variants", add_cohort_variants, session=db_session,
-                   variant_meta_path=variant_meta_path, obs_source=OBSERVATIONS)
+                   variant_meta_path=VARIANT_META_PATH, obs_source=OBSERVATIONS)
 
     # add the edges calculated from the available data
     logger.info("Adding calculated edges...")
-    add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path, metabo_data_path,
-                         variant_meta_path, gwas_stats_path)
+    add_calculated_edges(db_session, EDGES_PATH, PHENO_PATH, PROTEIN_PATH, METABOLITE_PATH,
+                         VARIANT_META_PATH, EXTRA_EDGES)
 
     # count the number of entries in the database
     metadata.reflect(bind=engine)
@@ -477,6 +472,11 @@ if __name__ == '__main__':
     logger.info("Adding views and indexes...")
     add_views(db_session)
     add_indexes(db_session, engine, metadata)
+
+    if VISUALIZE:
+        logger.debug("Generating graph visualization...")
+        graph_vis(engine, vis_type='html', filename='database_graph.html')
+        db_stats(db_session)
 
     db_session.close()
     logger.info("Database setup complete.")
