@@ -7,7 +7,7 @@ import networkx as nx
 from utils.settings import *
 
 
-def generate_graph(engine):
+def generate_graph(engine, session):
     edge_tables = ['effects', 'assoc', 'references']
     layer_1_tables = 'effects'
     layer_2_tables = 'assoc'
@@ -78,38 +78,32 @@ def generate_graph(engine):
     return G, node_colors, edge_labels
 
 
-def html_vis(G):
+def html_vis(G, filename="graph.html"):
     net = Network(height="600px", width="600px", notebook=False)
     net.from_nx(G)
     net.options.edges.smooth.enabled = False
     # net.barnes_hut()
-    net.write_html("graph.html")
+    net.write_html(filename)
 
 
-def plot_vis(G, node_colors, edge_labels):
+def plot_vis(G, node_colors, edge_labels, filename="uml_diagram.png"):
     pos = nx.spring_layout(G, 0.7)
     plt.figure(figsize=(10, 8))
     nx.draw(G, pos, with_labels=True, node_size=3000, node_color=node_colors, font_size=10, node_shape='s',
             font_weight='bold', edge_color='gray')
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
-    plt.savefig("uml_diagram.png")
+    plt.savefig(filename)
     plt.show()
 
 
-url = url_object = URL.create(
-    "postgresql",
-    username=DB_USER,
-    password=DB_PASSWORD,
-    host=DB_HOST,
-    port=DB_PORT,
-    database="dhn_db_testing",
-)
+def main(engine, vis_type='html', **kwargs):
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
-engine = create_engine(url)
+    G, node_colors, edge_labels = generate_graph(engine, session)
 
-Session = sessionmaker(bind=engine)
-session = Session()
+    if vis_type == 'html':
+        html_vis(G, **kwargs)
+    else:
+        plot_vis(G, node_colors, edge_labels, **kwargs)
 
-G, node_colors, edge_labels = generate_graph(engine)
-
-html_vis(G)

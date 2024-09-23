@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 dotenv.load_dotenv()
 
 # Debug settings
-DEBUG = True if os.getenv("DEBUG") == "True" else False
+DEBUG = True if os.getenv("DEBUG").lower() == "true" else False
 
 
 # Database settings
@@ -55,6 +55,7 @@ COHORT_COLUMNS = {
 
 # Other settings
 CHUNK_SIZE = os.getenv("CHUNK_SIZE") if os.getenv("CHUNK_SIZE") else 10_000_000
+VISUALIZE = True if os.getenv("DEBUG").lower() == "true" else False
 
 
 logger.debug("---------- Database settings ----------")
