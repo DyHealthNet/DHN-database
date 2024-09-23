@@ -95,8 +95,8 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
 def add_disorder_data(session, file_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
+    :param file_path: str, path to file with snomed ids
     :param session: Database session object
-    :param snomed_id_path: str, path to file with snomed ids
     :param obs_source: Describes the source of observations - e.g. CHRIS
     :param missing_ids: Optional - set of omim ids to add to the database. Use this to add missing omim ids from
     i.e. from associations with metabolites
@@ -124,13 +124,13 @@ def add_disorder_data(session, file_path: str = None, missing_ids: set[str] = No
 
     mondo_description = {mondo: data[mondo]['description'] for mondo in domain_to_mondo.values()}
 
-    genes_to_add, disorders, gene_associations, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
-                                                                               mondo_description, xrefs, display_names,
-                                                                               gene_dict, assoc_graph, obs_source)
+    genes_to_add, disorders, gene_assocs, found = retrieve_disorder_data(needed_snomed, domain_to_mondo,
+                                                                         mondo_description, xrefs, display_names,
+                                                                         gene_dict, assoc_graph, obs_source)
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, disorders, Disorder, ['mondo_id'])
-    add_items(session, gene_associations, GeneAssocDisorder, ['entrez_id', 'mondo_id'])
+    add_items(session, gene_assocs, GeneAssocDisorder, ['entrez_id', 'mondo_id'])
     session.commit()
     logger.info(f"Found and successfully added {found} snomed ids with diseases to db")
 
@@ -231,13 +231,12 @@ def add_cohort_protein_data(session, data_path: str = None, obs_source: str = No
 
 
 def add_cohort_variants(session, variant_meta_path: str = None, obs_source: str = None):
-    cohort_variants = cohort_variant_data(variant_meta_path)
-    add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
+    cohort_variants, variant_refs = cohort_variant_data(session, variant_meta_path, obs_source)
 
-    cohort_references_variant_to_add = get_cohort_references_variant(session, obs_source)
-    add_items(session, cohort_references_variant_to_add, CohortReferencesVariant,
-              filter_args=["cohort_id", "clinvar_id"])
+    add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
+    add_items(session, variant_refs, CohortReferencesVariant, filter_args=["cohort_id", "clinvar_id"])
     session.commit()
+    logger.info(f"Found and successfully added {len(cohort_variants)} genomic variants from cohort to db")
 
 
 def add_protein_data(session, file_path: str = None, obs_source: str = None, missing_ids: set = None):
@@ -250,7 +249,8 @@ def add_protein_data(session, file_path: str = None, obs_source: str = None, mis
     # get genes not yet in the database
     existing = set(session.query(Gene).filter(Gene.display_name.in_({x[1] for x in protein_gene_map})).all())
     missing = {x[1] for x in protein_gene_map} - {x.entrez_id for x in existing}
-    additional_genes, associations = gene_associations(protein_gene_map, {x.display_name: x.entrez_id for x in existing}, missing)
+    additional_genes, associations = gene_associations(protein_gene_map,
+                                                       {x.display_name: x.entrez_id for x in existing}, missing)
     logger.debug(f"Adding {len(additional_genes)} missing genes to the database for {len(associations)} associations")
 
     needed_ids = {f"uniprot.{uniprot_id}" for uniprot_id in protein_ids}

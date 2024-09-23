@@ -142,7 +142,7 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
     return proteins_to_add, references_to_add
 
 
-def cohort_variant_data(variants_meta_path: str):
+def cohort_variant_data(session, variants_meta_path: str, obs_source: str) -> tuple[set, set]:
     """
     reads Protein IDs from Chris dataset
     """
@@ -160,7 +160,9 @@ def cohort_variant_data(variants_meta_path: str):
 
     variant_set = set(variants_meta_df.apply(create_variant, axis=1))
     logger.debug(f"Time taken to process variants: {timeit.default_timer() - start}")
-    return variant_set
+
+    variant_refs = get_cohort_references_variant(session, obs_source)
+    return variant_set, variant_refs
 
 
 def get_cohort_references_variant(session, obs_source: str):
