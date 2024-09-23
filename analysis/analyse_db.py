@@ -80,7 +80,8 @@ def coverage(session: Session, base_reference: declarative_base, model: declarat
     combined_rows = set(rows_1) | (set(rows_2))
 
     coverage = len(combined_rows) / total_cohort
-    logger.debug(f"Coverage of {model.__name__} and {model_2.__name__}: {coverage}")
+    logger.debug(f"Coverage of {model.__name__}"
+                 f"{' and {0}'.format(model_2.__name__) if model_2 else ''}: {coverage:.2f}")
     return coverage
 
 
@@ -103,16 +104,16 @@ def vis_coverage(node_coverages: dict, filename: str = 'coverage.png'):
     plt.show()
 
 
-def main(session: Session):
+def main(session: Session, **kwargs):
     logger.debug(f"Found {len(all_models)} models in the database")
 
     row_counts = model_rows(session)
     layer_counts = cumulative_rows(session)
-    filename = 'db_size.csv'
-    write_csv(row_counts, layer_counts, filename)
+    filename = 'db_size.csv' if 'filename' not in kwargs else kwargs['csv_filename']
+    write_csv(row_counts, layer_counts, filename=filename)
     logger.info(f"Wrote database size to {filename}")
 
-    coverage_plot = 'coverage.png'
+    coverage_plot = 'coverage.png' if 'coverage_plot' not in kwargs else kwargs['coverage_filename']
     node_coverages = {
         'Protein': coverage(session, CohortProtein, CohortReferencesProtein),
         'Variant': coverage(session, CohortVariant, CohortReferencesVariant),

@@ -23,7 +23,7 @@ from utils.logger import get_logger
 from analysis.graph_vis import main as graph_vis
 from analysis.analyse_db import main as db_stats
 
-logger = get_logger(__name__)
+logger = get_logger('main')
 
 url = url_object = URL.create(
     "postgresql",
@@ -481,8 +481,11 @@ if __name__ == '__main__':
 
     if VISUALIZE:
         logger.debug("Generating graph visualization...")
-        graph_vis(engine, vis_type='html', filename='database_graph.html')
-        db_stats(db_session)
+        os.makedirs(f'{DATA_DIR}/output') if not os.path.exists(f'{DATA_DIR}/output') else None
+
+        graph_vis(engine, vis_type='html', filename=f'{DATA_DIR}/output/database_graph.html')
+        db_stats(db_session, csv_filename=f'{DATA_DIR}/output/database_stats.csv',
+                 coverage_filename=f'{DATA_DIR}/output/database_coverage.csv')
 
     db_session.close()
     logger.info("Database setup complete.")

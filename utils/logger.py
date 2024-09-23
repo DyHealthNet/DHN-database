@@ -8,6 +8,10 @@ dotenv.load_dotenv()
 logging.getLogger('urllib3').setLevel(logging.ERROR)
 logging.getLogger('requests').setLevel(logging.ERROR)
 
+# remove previous log file
+if os.path.exists('db_setup.log'):
+    os.remove('db_setup.log')
+
 
 def get_logger(name: str):
     logger = logging.getLogger(name)

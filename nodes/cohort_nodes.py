@@ -147,7 +147,7 @@ def cohort_protein_data(session: Session, protein_path: str = None, obs_source: 
 
 def cohort_variant_data(session: Session, variants_meta_path: str, obs_source: str) -> tuple[set, set]:
     """
-    reads Protein IDs from Chris dataset
+    Retrieves the variant data from the file
     """
     variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
     unique_id, dp_name, desc, xrefs = get_cols('variant')
@@ -168,14 +168,14 @@ def cohort_variant_data(session: Session, variants_meta_path: str, obs_source: s
     return variant_set, variant_refs
 
 
-def get_cohort_references_variant(session: Session, obs_source: str):
+def get_cohort_references_variant(session: Session, obs_source: str) -> set:
     new_cohort_references_set = set()
     query_result = session.query(CohortVariant).all()
 
     existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
                           for genomic_variant in query_result}
 
-    desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": genomic_variant.cohort_id
+    desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": str(genomic_variant.cohort_id)
                 for genomic_variant in query_result}
 
     for variant in session.query(GenomicVariant).all():
