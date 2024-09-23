@@ -1,4 +1,6 @@
 from sqlalchemy import distinct
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.declarative import declarative_base
 from utils.models import *
 import inspect
 import sys
@@ -13,7 +15,7 @@ nodes = [Gene, Protein, Phenotype, Disorder, Metabolite, GenomicVariant, CohortP
          CohortPhenotype]
 
 
-def model_rows(session):
+def model_rows(session: Session):
     # check how many rows are in each table
     sum_all = 0
     model_counts = {}
@@ -28,7 +30,7 @@ def model_rows(session):
     return model_counts
 
 
-def cumulative_rows(session):
+def cumulative_rows(session: Session):
     # check the two layers of the database, first layer is the cohort & calculated stuff, second layer is
     # the external knowledge graph
     layer_one = 0
@@ -49,7 +51,7 @@ def cumulative_rows(session):
     return {'One': layer_one, 'Two': layer_two}
 
 
-def write_csv(row_counts: dict, layer_counts: dict, filename='db_size.csv'):
+def write_csv(row_counts: dict, layer_counts: dict, filename: str = 'db_size.csv'):
     logger.debug(f"Writing the database size to {filename}")
     file = open(filename, 'w')
     file.write('Table, Count\n')
@@ -65,7 +67,8 @@ def write_csv(row_counts: dict, layer_counts: dict, filename='db_size.csv'):
     file.close()
 
 
-def coverage(session, base_reference, model, model_2 = None):
+def coverage(session: Session, base_reference: declarative_base, model: declarative_base,
+             model_2: declarative_base = None):
     # retrieve the number of unique rows of cohort_id column
     total_cohort = session.query(base_reference.cohort_id).count()
     if not model_2:
@@ -81,7 +84,7 @@ def coverage(session, base_reference, model, model_2 = None):
     return coverage
 
 
-def vis_coverage(node_coverages, filename='coverage.png'):
+def vis_coverage(node_coverages: dict, filename: str = 'coverage.png'):
     coverage = [('Variant', node_coverages['Variant']), ('Protein', node_coverages['Protein']),
                 ('Metabolite', node_coverages['Metabolite']), ('Phenotype', node_coverages['Phenotype'])]
     coverage.sort(key=lambda x: x[1], reverse=True)
@@ -100,7 +103,7 @@ def vis_coverage(node_coverages, filename='coverage.png'):
     plt.show()
 
 
-def main(session):
+def main(session: Session):
     logger.debug(f"Found {len(all_models)} models in the database")
 
     row_counts = model_rows(session)

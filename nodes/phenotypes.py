@@ -6,6 +6,7 @@ import urllib.request
 
 import requests
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from utils.query_nedrex import domain_id_to_mondo, get_edge_associations, \
     get_harmonizome_data, get_phenotype_data
@@ -312,7 +313,7 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_sour
     return genes_to_add, phenotypes, disorder_associations, found
 
 
-def get_additional_diseases(session, obs_source: str = None):
+def get_additional_diseases(session: Session, obs_source: str = None):
     # I know this defeats the purpose of SQLAlchemy but I could not find a way to do this with the ORM
     sql_string = f"""SELECT xrefs
                     FROM disorder

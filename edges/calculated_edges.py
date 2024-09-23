@@ -9,7 +9,7 @@ import pandas as pd
 
 from utils.models import *
 from sqlalchemy import URL, create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from utils.settings import *
 
 logger = get_logger(__name__)
@@ -86,7 +86,7 @@ def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     return set(label_file[id_col].to_list())
 
 
-def get_xref_rows(session, table: str = 'disorders', xref_col: str = 'omim'):
+def get_xref_rows(session: Session, table: str = 'disorders', xref_col: str = 'omim'):
     """
     Retrieve the rows from the given table that contain the given cross-reference
     :param session: SQLAlchemy session
@@ -105,7 +105,7 @@ def get_xref_rows(session, table: str = 'disorders', xref_col: str = 'omim'):
     return session.execute(text(sql_string)).fetchall()
 
 
-def filter_exising_ids(session, column: str) -> list:
+def filter_exising_ids(session: Session, column: str) -> list:
     """
     Find the existing IDs in the database for the given column
     :param session: SQLAlchemy session
@@ -119,6 +119,7 @@ def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set,
         -> tuple[tuple[str, str], tuple[str, str]] | tuple[None, None]:
     """
     Map the source and target of an edge to the appropriate data type given an id and the cohort sets
+    :param variant_set: set of unique variant IDs from the cohort data
     :param edge: Pandas Series containing the source and target of the edge
     :param protein_set: set of unique protein IDs from the cohort data
     :param pheno_set: set of unique phenotype labels from the cohort data
@@ -163,7 +164,7 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
     :return: Tuple containing the list of formatted edges and the list of edge types
     """
 
-    def map_and_filter(edge):
+    def map_and_filter(edge: pd.Series) -> tuple[tuple[str, str], tuple[str, str]] | tuple[None, None]:
         mapped, types = map_edge(edge, protein_set, phenotype_set, metabolite_set, variant_set)
         return mapped, types if types else None
 
@@ -215,7 +216,7 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
     return formatted_edges_list, [edge.__class__ for edge in formatted_edges_list]
 
 
-def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
+def format_edges(session: Session, edges: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
                  variant_set: set) -> None:
     """
     Format the edges and add them to the database in chunks. Deletes the formatted edges after adding them to the
@@ -263,7 +264,7 @@ def format_edges(session, edges: pd.DataFrame, protein_set: set, phenotype_set: 
     return
 
 
-def add_edges(session, edges: list[Base]) -> bool:
+def add_edges(session: Session, edges: list[Base]) -> bool:
     """
     Add the given list of edges to the database in bulk
     :param session: SQLAlchemy session
@@ -280,7 +281,8 @@ def add_edges(session, edges: list[Base]) -> bool:
     return True
 
 
-def add_calculated_edges(session, edges_path: str,
+def add_calculated_edges(session: Session,
+                         edges_path: str,
                          pheno_data_path: str | None,
                          protein_data_path: str | None,
                          metabo_data_path: str | None,

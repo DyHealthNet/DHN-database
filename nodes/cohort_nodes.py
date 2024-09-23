@@ -1,5 +1,7 @@
 import timeit
 
+from sqlalchemy.orm import Session
+
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
                           CohortVariant, CohortReferencesVariant, GenomicVariant, CohortReferencesMetabolite,
                           CohortReferencesProtein, CohortReferencesPhenotype, CohortReferencesDisease)
@@ -17,7 +19,8 @@ def get_cols(node_type: str) -> tuple[str, str, str, str]:
     return cols['unique_id'], cols['display_name'], cols['description'], cols['xref']
 
 
-def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str = None) -> tuple[list, list, list]:
+def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_source: str = None) \
+        -> tuple[list, list, list]:
     logger.debug("Adding cohort phenotype data to the database.")
     u_id, dp_name, desc, xrefs = get_cols('phenotype')
 
@@ -70,7 +73,7 @@ def cohort_phenotype_data(session, phenotype_path: str = None, obs_source: str =
     return phenotypes_to_add, disorder_references_to_add, phenotype_references_to_add
 
 
-def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str = None) -> tuple[list, list]:
+def cohort_metabolite_data(session: Session, metabolite_path: str = None, obs_source: str = None) -> tuple[list, list]:
     logger.debug("Adding cohort metabolite data to the database.")
     u_id, dp_name, desc, xrefs = get_cols('metabolite')
 
@@ -108,7 +111,7 @@ def cohort_metabolite_data(session, metabolite_path: str = None, obs_source: str
     return metabolites_to_add, references_to_add
 
 
-def cohort_protein_data(session, protein_path: str = None, obs_source: str = None) -> tuple[list, list]:
+def cohort_protein_data(session: Session, protein_path: str = None, obs_source: str = None) -> tuple[list, list]:
     logger.debug("Adding cohort protein data to the database.")
     u_id, dp_name, desc, xrefs = get_cols('protein')
 
@@ -142,7 +145,7 @@ def cohort_protein_data(session, protein_path: str = None, obs_source: str = Non
     return proteins_to_add, references_to_add
 
 
-def cohort_variant_data(session, variants_meta_path: str, obs_source: str) -> tuple[set, set]:
+def cohort_variant_data(session: Session, variants_meta_path: str, obs_source: str) -> tuple[set, set]:
     """
     reads Protein IDs from Chris dataset
     """
@@ -165,7 +168,7 @@ def cohort_variant_data(session, variants_meta_path: str, obs_source: str) -> tu
     return variant_set, variant_refs
 
 
-def get_cohort_references_variant(session, obs_source: str):
+def get_cohort_references_variant(session: Session, obs_source: str):
     new_cohort_references_set = set()
     query_result = session.query(CohortVariant).all()
 

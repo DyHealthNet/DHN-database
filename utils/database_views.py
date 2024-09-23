@@ -1,11 +1,13 @@
-from sqlalchemy import text, Table
+from sqlalchemy import text, Table, MetaData
+from sqlalchemy.orm import Session
+from sqlalchemy.engine import Engine
 from utils.models import *
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def add_views(session):
+def add_views(session: Session):
     # check if the view already exists and if so, update it
     view_exists = session.execute(text("SELECT to_regclass('view_description_fts')")).scalar()
     if view_exists is not None:
@@ -94,7 +96,7 @@ def add_views(session):
     session.commit()
 
 
-def add_indexes(session, engine, metadata):
+def add_indexes(session: Session, engine: Engine, metadata: MetaData):
     # Protein indexes for quick search
     idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.protein_id_1)
     # check if the index already exists

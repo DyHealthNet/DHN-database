@@ -3,7 +3,7 @@ import sys
 from utils.settings import *
 from nodes.cohort_nodes import *
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
 
@@ -43,7 +43,7 @@ def create_tables():
     Base.metadata.create_all(engine)
 
 
-def delete_tables(session):
+def delete_tables(session: Session):
     logger.warning("Removing all tables from the database.")
     # sql alchemy doesn't support dropping views, so we have to use raw sql
     session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
@@ -54,7 +54,7 @@ def delete_tables(session):
     Base.metadata.drop_all(engine, checkfirst=True)
 
 
-def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: list, bulk: bool = False):
+def add_items(session: Session, items: iter, column: type[DeclarativeBase], filter_args: list, bulk: bool = False):
     """
     Adds items to the database if they do not already exist
     :param session: Session object
@@ -92,7 +92,7 @@ def add_items(session, items: iter, column: type[DeclarativeBase], filter_args: 
     session.commit()
 
 
-def add_disorder_data(session, file_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
+def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[str] = None, obs_source: str = None):
     """
     Adds disorder data to the database given a path to a file with snomed ids
     :param file_path: str, path to file with snomed ids
@@ -135,7 +135,7 @@ def add_disorder_data(session, file_path: str = None, missing_ids: set[str] = No
     logger.info(f"Found and successfully added {found} snomed ids with diseases to db")
 
 
-def add_phenotype_data(session, file_path: str = None, data_dir: str = '../data', missing_ids: list = None,
+def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = '../data', missing_ids: list = None,
                        obs_source: str = None):
     """
     Adds phenotype data to the database given a path to a file with phenotype data
@@ -202,7 +202,7 @@ def add_phenotype_data(session, file_path: str = None, data_dir: str = '../data'
     logger.info(f"Found and successfully added {len(phenotypes)} snomed ids with phenotypes to db")
 
 
-def add_cohort_phenotype_data(session, data_path: str = None, obs_source: str = None):
+def add_cohort_phenotype_data(session: Session, data_path: str = None, obs_source: str = None):
     phenotypes_to_add, phenotype_refs, disorder_refs = cohort_phenotype_data(session, data_path, obs_source)
 
     add_items(session, phenotypes_to_add, CohortPhenotype, ['cohort_id'])
@@ -212,7 +212,7 @@ def add_cohort_phenotype_data(session, data_path: str = None, obs_source: str = 
     logger.info(f"Found and successfully added {len(phenotypes_to_add)} phenotypes from cohort to db")
 
 
-def add_cohort_metabolite_data(session, data_path: str = None, obs_source: str = None):
+def add_cohort_metabolite_data(session: Session, data_path: str = None, obs_source: str = None):
     metabolites_to_add, metabolite_refs = cohort_metabolite_data(session, data_path, obs_source)
 
     add_items(session, metabolites_to_add, CohortMetabolite, ['cohort_id'])
@@ -221,7 +221,7 @@ def add_cohort_metabolite_data(session, data_path: str = None, obs_source: str =
     logger.info(f"Found and successfully added {len(metabolites_to_add)} metabolites from cohort to db")
 
 
-def add_cohort_protein_data(session, data_path: str = None, obs_source: str = None):
+def add_cohort_protein_data(session: Session, data_path: str = None, obs_source: str = None):
     proteins_to_add, protein_refs = cohort_protein_data(session, data_path, obs_source)
 
     add_items(session, proteins_to_add, CohortProtein, ['cohort_id'])
@@ -230,7 +230,7 @@ def add_cohort_protein_data(session, data_path: str = None, obs_source: str = No
     logger.info(f"Found and successfully added {len(proteins_to_add)} proteins from cohort to db")
 
 
-def add_cohort_variants(session, variant_meta_path: str = None, obs_source: str = None):
+def add_cohort_variants(session: Session, variant_meta_path: str = None, obs_source: str = None):
     cohort_variants, variant_refs = cohort_variant_data(session, variant_meta_path, obs_source)
 
     add_items(session, cohort_variants, CohortVariant, ['cohort_id'], bulk=True)
@@ -239,7 +239,7 @@ def add_cohort_variants(session, variant_meta_path: str = None, obs_source: str 
     logger.info(f"Found and successfully added {len(cohort_variants)} genomic variants from cohort to db")
 
 
-def add_protein_data(session, file_path: str = None, obs_source: str = None, missing_ids: set = None):
+def add_protein_data(session: Session, file_path: str = None, obs_source: str = None, missing_ids: set = None):
     if missing_ids is None:
         protein_ids = read_protein_id_chris(file_path)
     else:
@@ -268,7 +268,7 @@ def add_protein_data(session, file_path: str = None, obs_source: str = None, mis
     session.commit()
 
 
-def add_metabolite_data(session, file_path: str = None, data_dir: str = '../data', obs_source: str = None):
+def add_metabolite_data(session: Session, file_path: str = None, data_dir: str = '../data', obs_source: str = None):
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
     download_metabolite_data(data_dir)
     metabolite_mapping = read_metabolite_mapping(file_path)
@@ -335,7 +335,7 @@ def add_metabolite_data(session, file_path: str = None, data_dir: str = '../data
     session.commit()
 
 
-def add_genomic_variant_data(session, file_path: str = None, obs_source: str = None):
+def add_genomic_variant_data(session: Session, file_path: str = None, obs_source: str = None):
     rs_id_list = read_rsid_chris(file_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, GenomicVariant, filter_args=['clinvar_id'])
@@ -354,7 +354,7 @@ def add_genomic_variant_data(session, file_path: str = None, obs_source: str = N
     logger.info("Added variant affects gene edges")
 
 
-def add_missing(session, data: iter = None, node_type: str = None):
+def add_missing(session: Session, data: iter = None, node_type: str = None):
     """
     Adds missing data to the database
     :param session: Session object
@@ -393,18 +393,23 @@ def add_node_type(data_path: str = None, data_path_2: str = None) -> bool:
 
 
 def add_layer_node(add_node: bool = False, node_name: str = None, function: callable = None, **kwargs):
-    if add_node:
+    if not add_node:
+        logger.debug(f"Node type {node_name} not provided. Therefore, not adding.")
+        return
+    try:
         logger.info(f"Adding {node_name}...")
         function(**kwargs)
+    except Exception as e:
+        logger.error(f"Error adding {node_name}: {e}")
 
 
 if __name__ == '__main__':
     # Define a session
     Session = sessionmaker(bind=engine)
     db_session = Session()
+
+    # delete all tables and recreate them
     delete_tables(db_session)
-    dotenv.load_dotenv()
-    metadata = MetaData()
     create_tables()
 
     if not all([EDGES_PATH, DATA_DIR]):
@@ -466,6 +471,7 @@ if __name__ == '__main__':
                          VARIANT_META_PATH, EXTRA_EDGES)
 
     # count the number of entries in the database
+    metadata = MetaData()
     metadata.reflect(bind=engine)
 
     # add remaining things (indexes, views)
