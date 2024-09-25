@@ -71,6 +71,8 @@ def coverage(session: Session, base_reference: declarative_base, model: declarat
              model_2: declarative_base = None):
     # retrieve the number of unique rows of cohort_id column
     total_cohort = session.query(base_reference.cohort_id).count()
+    if not model:
+        return None
     if not model_2:
         num_rows = session.query(distinct(model.cohort_id)).count()
         return num_rows / total_cohort
@@ -86,15 +88,17 @@ def coverage(session: Session, base_reference: declarative_base, model: declarat
 
 
 def vis_coverage(node_coverages: dict, filename: str = 'coverage.png'):
-    coverage = [('Variant', node_coverages['Variant']), ('Protein', node_coverages['Protein']),
-                ('Metabolite', node_coverages['Metabolite']), ('Phenotype', node_coverages['Phenotype'])]
-    coverage.sort(key=lambda x: x[1], reverse=True)
+    coverage_vals = [('Variant', node_coverages['Variant']), ('Protein', node_coverages['Protein']),
+                     ('Metabolite', node_coverages['Metabolite']), ('Phenotype', node_coverages['Phenotype'])]
+    coverage_vals = [x for x in coverage_vals if x[1] is not None]
+
+    coverage_vals.sort(key=lambda x: x[1], reverse=True)
 
     # plot the coverage
     fig, ax = plt.subplots()
 
-    ax.bar([x[0] for x in coverage], [x[1] * 100 for x in coverage])
-    for i, v in enumerate([x[1] * 100 for x in coverage]):
+    ax.bar([x[0] for x in coverage_vals], [x[1] * 100 for x in coverage_vals])
+    for i, v in enumerate([x[1] * 100 for x in coverage_vals]):
         ax.text(i, v + 1, f"{v:.2f}%", ha='center', va='bottom')
     ax.set_ylabel('Coverage in %')
     ax.set_xlabel('Node type')

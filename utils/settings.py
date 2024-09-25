@@ -55,7 +55,7 @@ COHORT_COLUMNS = {
 
 # Other settings
 CHUNK_SIZE = os.getenv("CHUNK_SIZE") if os.getenv("CHUNK_SIZE") else 10_000_000
-VISUALIZE = True if os.getenv("DEBUG").lower() == "true" else False
+VISUALIZE = True if os.getenv("VISUALIZE").lower() == "true" else False
 
 
 logger.debug("---------- Database settings ----------")

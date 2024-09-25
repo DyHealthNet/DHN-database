@@ -431,6 +431,7 @@ if __name__ == '__main__':
 
     logger.info("Initialising Layer 2 of database\n")
 
+    # The order at which these functions are called is important
     add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
                    file_path=VARIANT_META_PATH, obs_source=OBSERVATIONS)
 

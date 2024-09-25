@@ -1,6 +1,6 @@
 import timeit
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, declarative_base
 
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
                           CohortVariant, CohortReferencesVariant, GenomicVariant, CohortReferencesMetabolite,
@@ -164,19 +164,18 @@ def cohort_variant_data(session: Session, variants_meta_path: str, obs_source: s
     variant_set = set(variants_meta_df.apply(create_variant, axis=1))
     logger.debug(f"Time taken to process variants: {timeit.default_timer() - start}")
 
-    variant_refs = get_cohort_references_variant(session, obs_source)
+    variant_refs = get_cohort_references_variant(session, variant_set, obs_source)
     return variant_set, variant_refs
 
 
-def get_cohort_references_variant(session: Session, obs_source: str) -> set:
+def get_cohort_references_variant(session: Session, variants: declarative_base, obs_source: str) -> set:
     new_cohort_references_set = set()
-    query_result = session.query(CohortVariant).all()
 
     existing_cohort_id = {(genomic_variant.description, f"{genomic_variant.cohort_id[-1]}")
-                          for genomic_variant in query_result}
+                          for genomic_variant in variants}
 
     desc_map = {f"{genomic_variant.description}{genomic_variant.cohort_id[-1]}": str(genomic_variant.cohort_id)
-                for genomic_variant in query_result}
+                for genomic_variant in variants}
 
     for variant in session.query(GenomicVariant).all():
         variant_domain_ids = variant.xrefs
