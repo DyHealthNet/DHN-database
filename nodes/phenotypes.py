@@ -8,9 +8,8 @@ import requests
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from utils.query_nedrex import domain_id_to_mondo, get_edge_associations, \
-    get_harmonizome_data, get_phenotype_data
-
+from utils.query_nedrex import domain_id_to_mondo, get_edge_associations, get_harmonizome_data
+from utils.settings import COHORT_COLUMNS
 from utils.models import Gene, Disorder, GeneAssocDisorder, Phenotype, DisorderAssocPhenotype
 from utils.logger import get_logger
 
@@ -73,8 +72,8 @@ def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     :return: dataframe with phenotype data
     """
     df = pd.read_csv(phenotype_path, sep='\t')
-    uniqe_snomed = df['snomed_id'].unique()
-    snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in uniqe_snomed] for snomed in sublist]
+    unique_snomed = df[COHORT_COLUMNS['phenotype']['xref']].unique()
+    snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in unique_snomed] for snomed in sublist]
     logger.debug(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
     snomeds = set([f"snomedct.{snomed.strip()}" for snomed in snomeds if snomed != "nan"])
     return snomeds
