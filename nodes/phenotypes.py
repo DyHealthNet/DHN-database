@@ -44,6 +44,17 @@ def download_hpo_ontology(data_dir: str) -> None:
     urllib.request.urlretrieve(phenotype_link, download_path)
 
 
+def terms_from_hpo():
+    """
+    Retrieve all HPO terms from the HPO API
+    :return: json data with all HPO terms
+    """
+    logger.debug("Downloading HPO terms from the HPO API")
+    url = 'https://ontology.jax.org/api/hp/terms'
+    response = requests.get(url)
+    return response.json()
+
+
 def read_hpo_ontology(hpo_path: str) -> dict:
     """
     Reads the HPO ontology json file
@@ -65,7 +76,7 @@ def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     uniqe_snomed = df['snomed_id'].unique()
     snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in uniqe_snomed] for snomed in sublist]
     logger.debug(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
-    snomeds = set([f"snomedct.{snomed}" for snomed in snomeds if snomed != "nan"])
+    snomeds = set([f"snomedct.{snomed.strip()}" for snomed in snomeds if snomed != "nan"])
     return snomeds
 
 
@@ -86,7 +97,29 @@ def ontology_data_to_network(hpo_data: dict) -> nx.Graph:
     return graph
 
 
-def snomed_from_hpo(hpo_graph, needed_snomed_ids) -> dict:
+def snomed_from_hpo_api(hpo_data: list, needed_snomed_ids: set[str]) -> dict:
+    snomed_ids = {}
+    for node in hpo_data:
+        xrefs = node.get('xrefs', [])
+        for ref in xrefs:
+            if 'SNOMEDCT_US' not in ref:
+                continue
+            snomed_id = ref.split(':')[-1]
+            snomed_id = f"snomedct.{snomed_id}"
+            if snomed_id in needed_snomed_ids:
+                snomed_ids[snomed_id] = node['id']
+    return snomed_ids
+
+
+def snomed_from_hpo(hpo_data: nx.Graph | list, needed_snomed_ids: set[str]) -> dict:
+    if isinstance(hpo_data, nx.Graph):
+        snomed_ids = snomed_from_hpo_graph(hpo_data, needed_snomed_ids)
+    else:
+        snomed_ids = snomed_from_hpo_api(hpo_data, needed_snomed_ids)
+    return snomed_ids
+
+
+def snomed_from_hpo_graph(hpo_graph, needed_snomed_ids) -> dict:
     """
     Find the SNOMED ids in the HPO ontology that are needed
     :param hpo_graph: Graph of the HPO ontology
@@ -323,21 +356,3 @@ def get_additional_diseases(session: Session, obs_source: str = None):
                         WHERE xref LIKE 'omim.%'
                     ) AND observation_source = '{obs_source}';"""
     return {x for x in session.execute(text(sql_string)).fetchall() for x in x[0] if x.startswith('omim.')}
-
-
-if __name__ == '__main__':
-
-    # data handling
-    data_dir = '../../data'
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    needed_files = [f'{data_dir}/hp.json', f'{data_dir}/phenotype.hpoa']
-    if not all([os.path.exists(f) for f in needed_files]):
-        download_hpo_ontology(data_dir)
-
-    hpo_data = read_hpo_ontology(needed_files[0])
-    hpo_graph = ontology_data_to_network(hpo_data)
-    needed_ids = get_needed_snomed_ids('../../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv')
-
-    # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
-    available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)

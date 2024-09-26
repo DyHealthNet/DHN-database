@@ -13,7 +13,7 @@ from nodes.variants import get_genomic_variant_nodes, read_rsid_chris, add_varia
 from nodes.metabolites import read_metabolite_mapping, read_hmdb_data, download_metabolite_data, \
     retrieve_assoc_metabolite_nodes
 from nodes.phenotypes import download_hpo_ontology, read_hpo_ontology, ontology_data_to_network, snomed_from_hpo, \
-    retrieve_disorder_data, retrieve_phenotype_data, get_additional_diseases, get_needed_snomed_ids
+    retrieve_disorder_data, retrieve_phenotype_data, get_additional_diseases, get_needed_snomed_ids, terms_from_hpo
 
 from utils.models import *
 from utils.query_nedrex import domain_id_to_mondo, get_disorder_data, get_edge_associations, get_gene_data, \
@@ -147,19 +147,23 @@ def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = 
     :return: None
     """
     # data handling
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-    needed_files = [f'{data_dir}/hp.json', f'{data_dir}/phenotype.hpoa']
-    if not all([os.path.exists(f) for f in needed_files]):
-        download_hpo_ontology(data_dir)
+    try:
+        hpo_graph = terms_from_hpo()
+    except Exception:
+        logger.info("Could not connect to the HPO API, trying to use flat files")
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        needed_files = [f'{data_dir}/hp.json', f'{data_dir}/phenotype.hpoa']
+        if not all([os.path.exists(f) for f in needed_files]):
+            download_hpo_ontology(data_dir)
+
+        hpo_data = read_hpo_ontology(needed_files[0])
+        hpo_graph = ontology_data_to_network(hpo_data)
 
     if not file_path:
         needed_ids = missing_ids
     else:
         needed_ids = get_needed_snomed_ids(file_path)
-
-    hpo_data = read_hpo_ontology(needed_files[0])
-    hpo_graph = ontology_data_to_network(hpo_data)
 
     available_snomed_ids = snomed_from_hpo(hpo_graph, needed_ids)
 
