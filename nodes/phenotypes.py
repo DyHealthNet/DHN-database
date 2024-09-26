@@ -75,7 +75,7 @@ def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
     unique_snomed = df[COHORT_COLUMNS['phenotype']['xref']].unique()
     snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in unique_snomed] for snomed in sublist]
     logger.debug(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
-    snomeds = set([f"snomedct.{snomed.strip()}" for snomed in snomeds if snomed != "nan"])
+    snomeds = set([snomed.strip() for snomed in snomeds if snomed != "nan"])
     return snomeds
 
 
@@ -104,7 +104,6 @@ def snomed_from_hpo_api(hpo_data: list, needed_snomed_ids: set[str]) -> dict:
             if 'SNOMEDCT_US' not in ref:
                 continue
             snomed_id = ref.split(':')[-1]
-            snomed_id = f"snomedct.{snomed_id}"
             if snomed_id in needed_snomed_ids:
                 snomed_ids[snomed_id] = node['id']
     return snomed_ids
@@ -126,7 +125,6 @@ def snomed_from_hpo_graph(hpo_graph, needed_snomed_ids) -> dict:
     :return: mapping from snomed ids to HPO ids
     """
     snomed_ids = {}
-    needed_snomed_ids = set([x.split(".")[1] for x in needed_snomed_ids])
     for node in hpo_graph.nodes(data=True):
         xrefs = node[1].get('xrefs', [])
         for xref in xrefs:

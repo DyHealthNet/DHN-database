@@ -104,6 +104,7 @@ def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[
     """
     if missing_ids is None:
         needed_snomed = get_needed_snomed_ids(file_path)
+        needed_snomed = {f"snomedct.{x}" for x in needed_snomed}
         data = get_disorder_data(needed_snomed)
         domain_to_mondo = domain_id_to_mondo(data)
     else:
