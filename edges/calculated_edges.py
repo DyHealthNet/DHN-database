@@ -4,6 +4,7 @@
 # 2. load info files for label names
 # 3. convert label names to proper names
 # 4. add the edges to the database
+from io import StringIO
 
 import pandas as pd
 
@@ -14,27 +15,30 @@ from utils.settings import *
 
 logger = get_logger(__name__)
 
+
 DB_EDGES = {
-    ('protein', 'protein'): (EffectsProteinProtein, 'protein_id_1', 'protein_id_2'),
-    ('protein', 'phenotype'): (EffectsProteinPhenotype, 'protein_id', 'phenotype_id'),
-    ('phenotype', 'protein'): (EffectsProteinPhenotype, 'phenotype_id', 'protein_id'),
-    ('protein', 'metabolite'): (EffectsProteinMetabolite, 'protein_id', 'metabolite_id'),
-    ('metabolite', 'protein'): (EffectsProteinMetabolite, 'metabolite_id', 'protein_id'),
-    ('protein', 'variant'): (EffectsVariantProtein, 'protein_id', 'variant_id'),
+    ('phenotype', 'variant'): "effects_variant_phenotype",
+    ('variant', 'phenotype'): "effects_variant_phenotype",
+    ('variant', 'metabolite'): "effects_variant_metabolite",
+    ('metabolite', 'variant'): "effects_variant_metabolite",
+    ('variant', 'protein'): "effects_variant_protein",
+    ('protein', 'variant'): "effects_variant_protein",
 
-    ('metabolite', 'metabolite'): (EffectsMetaboliteMetabolite, 'metabolite_id_1', 'metabolite_id_2'),
-    ('metabolite', 'phenotype'): (EffectsMetabolitePhenotype, 'metabolite_id', 'phenotype_id'),
-    ('phenotype', 'metabolite'): (EffectsMetabolitePhenotype, 'phenotype_id', 'metabolite_id'),
-    ('metabolite', 'variant'): (EffectsVariantMetabolite, 'metabolite_id', 'variant_id'),
+    ('protein', 'protein'): "effects_protein_protein",
+    ('protein', 'phenotype'): "effects_protein_phenotype",
+    ('phenotype', 'protein'): "effects_protein_phenotype",
+    ('protein', 'metabolite'): "effects_protein_metabolite",
+    ('metabolite', 'protein'): "effects_protein_metabolite",
 
-    ('phenotype', 'phenotype'): (EffectsPhenotypePhenotype, 'phenotype_id_1', 'phenotype_id_2'),
-    ('phenotype', 'variant'): (EffectsVariantPhenotype, 'phenotype_id', 'variant_id'),
+    ('metabolite', 'metabolite'): "effects_metabolite_metabolite",
+    ('metabolite', 'phenotype'): "effects_metabolite_phenotype",
+    ('phenotype', 'metabolite'): "effects_metabolite_phenotype",
 
-    ('variant', 'metabolite'): (EffectsVariantMetabolite, 'variant_id', 'metabolite_id'),
-    ('variant', 'protein'): (EffectsVariantProtein, 'variant_id', 'protein_id'),
-    ('variant', 'phenotype'): (EffectsVariantPhenotype, 'variant_id', 'phenotype_id'),
-    # ('variant', 'variant'): (EffectsVariantVariant, 'variant_id_1', 'variant_id_2'),
+    ('phenotype', 'phenotype'): "effects_phenotype_phenotype",
 }
+
+# this gives us information which data type comes first in the column order
+EDGE_ORDER = {'variant': 3, 'protein': 2, 'metabolite': 1, 'phenotype': 0}
 
 
 def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
@@ -49,7 +53,7 @@ def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
     return pd.read_csv(file_path, sep=sep)
 
 
-def load_extra(extra_paths: str, sep="\t") -> pd.DataFrame:
+def load_extra(extra_paths: str, sep="\t") -> StringIO:
     """
     Load the extra files from the given paths as a dictionary of pandas DataFrames
     :param extra_paths: str - path(s), separated by commas
@@ -57,17 +61,43 @@ def load_extra(extra_paths: str, sep="\t") -> pd.DataFrame:
     :return: dict of Pandas DataFrames
     """
     paths = extra_paths.split(',')
-    extra_files = []
+    buffer = StringIO()
+
     for path in paths:
         if not os.path.exists(path):
             logger.error(f"Extra file {path} does not exist, skipping...")
             continue
-        extra_files.append(load_files(path, sep))
+        raw_df = load_files(path, sep)
+        try:
+            raw_df = raw_df[['label1', 'label2', 'pval', 'adj_pval', 'effsize', 'effsize_type', 'test']]
+        except KeyError:
+            logger.error(f"Extra file {path} is missing columns, skipping...")
+            continue
 
-    assert all([extra_files[0].columns == file.columns for file in extra_files[1:]]), \
-        "Extra files do not have the same columns, invalid!"
+        # replace column pval and effsize with an escaped version
+        raw_df['pval'] = raw_df['pval'].apply(lambda x: r'"{\"full\": %s}"' % x)
+        raw_df['effsize'] = raw_df['effsize'].apply(lambda x: r'"{\"full\": %s}"' % x)
+        raw_df.to_csv(buffer, sep=',', index=True, header=False, quoting=3, lineterminator='\n')
+        # move the buffer to the end of the file
+        buffer.seek(0, 2)
 
-    return pd.concat(extra_files, ignore_index=True)
+    return buffer
+
+
+def swap_labels(s, label1, label2):
+    index1 = s.find(label1)
+    index2 = s.find(label2)
+
+    if index1 == -1 or index2 == -1:
+        return s
+
+    before = s[:min(index1, index2)]
+    between = s[min(index1 + len(label1), index2 + len(label2)):max(index1, index2)]
+    after = s[max(index1 + len(label1), index2 + len(label2)):]
+
+    if index1 < index2:
+        return before + label2 + between + label1 + after
+    return before + label1 + between + label2 + after
 
 
 def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
@@ -86,37 +116,8 @@ def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     return set(label_file[id_col].to_list())
 
 
-def get_xref_rows(session: Session, table: str = 'disorders', xref_col: str = 'omim'):
-    """
-    Retrieve the rows from the given table that contain the given cross-reference
-    :param session: SQLAlchemy session
-    :param table: str - database table name
-    :param xref_col: str - cross-reference name e.g. omim, snomedct
-    :return: list of rows
-    """
-    # I know this defeats the purpose of SQLAlchemy, but I could not find a way to do this with the ORM
-    sql_string = f"""SELECT *
-                    FROM {table}
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM unnest(xrefs) AS xref
-                        WHERE xref LIKE '{xref_col}.%'
-                    );"""
-    return session.execute(text(sql_string)).fetchall()
-
-
-def filter_exising_ids(session: Session, column: str) -> list:
-    """
-    Find the existing IDs in the database for the given column
-    :param session: SQLAlchemy session
-    :param column: str - column name
-    :return: list of existing IDs
-    """
-    return session.query(column).all()
-
-
-def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set, variant_set: set) \
-        -> tuple[tuple[str, str], tuple[str, str]] | tuple[None, None]:
+def map_edge(edge: tuple, protein_set: set, pheno_set: set, metabo_set: set, variant_set: set) \
+        -> tuple[str, str, bool] | None:
     """
     Map the source and target of an edge to the appropriate data type given an id and the cohort sets
     :param variant_set: set of unique variant IDs from the cohort data
@@ -133,25 +134,29 @@ def map_edge(edge: pd.Series, protein_set: set, pheno_set: set, metabo_set: set,
 
     for cohort_set, data_type in maps_and_types:
         if not mapped_source:
-            if edge['label1'] in cohort_set:
+            if edge[0] in cohort_set:
                 source_type = data_type
-                mapped_source = edge['label1']
+                mapped_source = edge[0]
 
         if not mapped_target:
-            if edge['label2'] in cohort_set:
+            if edge[1] in cohort_set:
                 target_type = data_type
-                mapped_target = edge['label2']
+                mapped_target = edge[1]
 
         if source_type and target_type:
             break
 
     if not source_type or not target_type:
-        return None, None
-    return (mapped_source, mapped_target), (source_type, target_type)
+        return None
+
+    swap = False
+    if EDGE_ORDER[source_type] < EDGE_ORDER[target_type]:
+        swap = True
+    return source_type, target_type, swap
 
 
-def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
-                  variant_set: set) -> tuple[list, list]:
+def process_file(edges, protein_set: set, phenotype_set: set, metabolite_set: set,
+                 variant_set: set) -> dict:
     """
     Process a chunk of edges by mapping and filtering the source and target of the edge, and creating SQLAlchemy objects
     that represent the edge to add to the database.
@@ -163,60 +168,32 @@ def process_chunk(edges_chunk: pd.DataFrame, protein_set: set, phenotype_set: se
     :param variant_set: set of unique variant IDs from the cohort data
     :return: Tuple containing the list of formatted edges and the list of edge types
     """
+    all_edge_types = {edge_type: StringIO() for edge_type in DB_EDGES.values()}
 
-    def map_and_filter(edge: pd.Series) -> tuple[tuple[str, str], tuple[str, str]] | tuple[None, None]:
-        mapped, types = map_edge(edge, protein_set, phenotype_set, metabolite_set, variant_set)
-        return mapped, types if types else None
+    def map_and_filter(edge: tuple) -> tuple[tuple[str, str], tuple[str, str], bool] | tuple[None, None, bool]:
+        mapped, types, swap = map_edge(edge, protein_set, phenotype_set, metabolite_set, variant_set)
+        return mapped, types if types else None, swap
 
-    # Apply the map_and_filter function to the chunk
-    mapped_results = edges_chunk.apply(map_and_filter, axis=1)
+    edges.readline()
+    for line in edges.readlines():
+        if "nan" in line:
+            continue
+        line_split = line.split(',')
+        source, dest = line_split[1], line_split[2]
+        source_map, dest_map, swap = map_and_filter((source, dest))
+        if source_map is None or dest_map is None:
+            continue
+        edge_map = (source_map, dest_map)
+        # swap the labels to match the order in the database
+        if swap:
+            line = swap_labels(line, source, dest)
+        all_edge_types[DB_EDGES[edge_map]].write(line)
 
-    # Filter the valid results
-    valid_results = [result for result in mapped_results if result[1] is not None]
-
-    if not valid_results:
-        return [], []
-
-    # Separate the mapped edges and types
-    mapped_edges, types_list = zip(*valid_results)
-
-    # Extract valid rows based on indices of valid results
-    valid_indices = [i for i, result in enumerate(mapped_results) if result[1] is not None]
-    valid_edges = edges_chunk.iloc[valid_indices]
-
-    # Create a new DataFrame with the mapped data
-    formatted_edges = pd.DataFrame({
-        'source': [source for source, _ in mapped_edges],
-        'target': [target for _, target in mapped_edges],
-        'source_type': [source_type for source_type, _ in types_list],
-        'target_type': [target_type for _, target_type in types_list],
-        'p_value': valid_edges['pval'].values,
-        'adjusted_p_value': valid_edges['adj_pval'].values,
-        'effect_size': valid_edges['effsize'].values,
-        'effect_size_type': valid_edges['effsize_type'].values,
-        'test_statistic': valid_edges['test'].values
-    })
-
-    formatted_edges_list = []
-    for idx, row in formatted_edges.iterrows():
-        edge_type = (row['source_type'], row['target_type'])
-        if edge_type in DB_EDGES:
-            edge_class, source_col, target_col = DB_EDGES[edge_type]
-            edge = edge_class(**{
-                source_col: row['source'],
-                target_col: row['target'],
-                'p_value': row['p_value'],
-                'adjusted_p_value': row['adjusted_p_value'],
-                'effect_size': row['effect_size'],
-                'effect_size_type': row['effect_size_type'],
-                'test_statistic': row['test_statistic']
-            })
-            formatted_edges_list.append(edge)
-
-    return formatted_edges_list, [edge.__class__ for edge in formatted_edges_list]
+    logger.debug("Finished processing edges")
+    return all_edge_types
 
 
-def format_edges(session: Session, edges: pd.DataFrame, protein_set: set, phenotype_set: set, metabolite_set: set,
+def format_edges(session: Session, edges, protein_set: set, phenotype_set: set, metabolite_set: set,
                  variant_set: set) -> None:
     """
     Format the edges and add them to the database in chunks. Deletes the formatted edges after adding them to the
@@ -229,42 +206,38 @@ def format_edges(session: Session, edges: pd.DataFrame, protein_set: set, phenot
     :param variant_set: set of unique variant IDs from the cohort data
     :return: None
     """
-    all_edge_types = {edge_type[0]: 0 for edge_type in DB_EDGES.values()}
-    num_edge_types = {}
-    chunk_size = CHUNK_SIZE
-    num_chunks = (len(edges) // chunk_size) + 1
 
-    if DEBUG:
-        chunk_size = 10_000
-        num_chunks = 1
-        edges = edges.sample(frac=1)
+    formatted_edges = process_file(edges, protein_set, phenotype_set, metabolite_set, variant_set)
 
-    for i in range(num_chunks):
-        start_index = i * chunk_size
-        end_index = min((i + 1) * chunk_size, len(edges))
-        edges_chunk = edges.iloc[start_index:end_index]
+    add_success = add_edges(session, formatted_edges)
+    del formatted_edges
+    if not add_success:
+        logger.error("There was a problem adding the edges to the database, exiting...")
+        return
+    logger.info(f"File added successfully")
 
-        # Process the current chunk
-        formatted_edges_list, edge_types = process_chunk(edges_chunk, protein_set, phenotype_set,
-                                                         metabolite_set, variant_set)
-
-        add_success = add_edges(session, formatted_edges_list)
-        del formatted_edges_list
-        if not add_success:
-            logger.error("There was a problem adding the edges to the database, exiting...")
-            return
-        logger.info(f"Chunk {i + 1}/{num_chunks} added successfully")
-        # do the value counts of the edges and add them to a running total
-        chunk_edge_types = pd.Series(edge_types).value_counts().to_dict()
-        num_edge_types = {edge_type: num_edge_types_value + chunk_edge_types.get(edge_type, 0)
-                          for edge_type, num_edge_types_value in all_edge_types.items()}
-
-    for edge_type, count in num_edge_types.items():
-        logger.debug(f"Added {count} edges of type {edge_type.__name__}")
+    # for edge_type, count in num_edge_types.items():
+    #    logger.debug(f"Added {count} edges of type {edge_type.__name__}")
     return
 
 
-def add_edges(session: Session, edges: list[Base]) -> bool:
+def copy_from_buffer(session, edge_type, edge_file):
+    # Get the raw psycopg2 connection from SQLAlchemy
+    raw_connection = session.connection().connection
+    with raw_connection.cursor() as cursor:
+        edge_file.seek(0)
+        copy_sql = f"COPY {edge_type} FROM STDIN WITH CSV HEADER QUOTE '\"' DELIMITER ',' ESCAPE '\\'"
+        cursor.copy_expert(copy_sql, edge_file)
+        raw_connection.commit()
+
+
+def count_rows(buffer):
+    buffer.seek(0)
+    row_count = buffer.getvalue().count('\n')
+    return row_count
+
+
+def add_edges(session: Session, edges: dict) -> bool:
     """
     Add the given list of edges to the database in bulk
     :param session: SQLAlchemy session
@@ -272,8 +245,17 @@ def add_edges(session: Session, edges: list[Base]) -> bool:
     :return: bool - True if the edges were added successfully, False otherwise
     """
     try:
-        session.bulk_save_objects(edges)
-        session.commit()
+        if DEBUG:
+            # clear the tables
+            for edge_type in DB_EDGES.values():
+                session.execute(text(f"TRUNCATE TABLE {edge_type}"))
+        for edge_type, edge_file in edges.items():
+            if edge_file is None:
+                continue
+            copy_from_buffer(session, edge_type, edge_file)
+            edge_count = count_rows(edge_file)
+            if edge_count > 0:
+                logger.debug(f"Finished adding {edge_count} {edge_type} edges")
     except Exception as e:
         session.rollback()
         logger.error(f"A problem occurred while adding edges: {e}")
@@ -304,13 +286,6 @@ def add_calculated_edges(session: Session,
     metabolites = load_files(metabo_data_path)
     variants = load_files(variant_data_path)
 
-    edges = load_files(edges_path, sep=",")
-    edges = edges.iloc[:, 1:]  # removing unnamed column
-    if extra_edge_paths:
-        logger.debug("Loading extra data files")
-        extra_data = load_extra(extra_edge_paths)
-        edges = pd.concat([edges, extra_data], ignore_index=True)
-
     # get base labels
     pheno_set = get_labels(phenotypes, 'phenotype')
     protein_set = get_labels(proteins, 'protein')
@@ -318,8 +293,14 @@ def add_calculated_edges(session: Session,
     variant_set = get_labels(variants, 'variant')
     logger.debug("All cohort sets loaded successfully")
 
+    edges = open(edges_path, 'r')
     format_edges(session, edges, protein_set, pheno_set, metabo_set, variant_set)
-    # formatted_edges = format_edges(edges[edges['pval'] <= 0.05], protein_set, pheno_map, metabo_map, disorder_map)
+
+    if extra_edge_paths:
+        logger.debug("Loading extra data files")
+        extra_data = load_extra(extra_edge_paths)
+        extra_data.seek(0)
+        format_edges(session, extra_data, protein_set, pheno_set, metabo_set, variant_set)
 
 
 if __name__ == '__main__':
@@ -335,10 +316,10 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     db_session = Session()
 
-    edges_path = '../data/scores_including_tests.csv'
-    pheno_data_path = '../data/DyHealthNet/chris_summary_data/phenotypes/pheno_meta_all.tsv'
-    protein_data_path = None
-    metabo_data_path = '../data/DyHealthNet/chris_summary_data/metabolites/CHRIS_biocristes7500SumStats.txt'
+    edges_path = EDGES_PATH
+    pheno_data_path = None
+    protein_data_path = "../" + PROTEIN_PATH
+    metabo_data_path = METABOLITE_PATH
     variant_data_path = None
 
     add_calculated_edges(db_session, edges_path, pheno_data_path, protein_data_path,

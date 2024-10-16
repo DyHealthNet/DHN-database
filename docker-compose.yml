@@ -1,7 +1,7 @@
 services:
   postgres:
     container_name: dhn_db
-    image: postgres:latest
+    image: postgres:16
     ports:
       - 9852:5432
     volumes:
