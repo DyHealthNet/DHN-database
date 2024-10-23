@@ -23,6 +23,8 @@ from utils.logger import get_logger
 from analysis.graph_vis import main as graph_vis
 from analysis.analyse_db import main as db_stats
 
+# test
+
 logger = get_logger('main')
 
 url = url_object = URL.create(
