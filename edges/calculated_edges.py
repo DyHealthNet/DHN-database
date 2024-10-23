@@ -226,7 +226,7 @@ def copy_from_buffer(session, edge_type, edge_file):
     raw_connection = session.connection().connection
     with raw_connection.cursor() as cursor:
         edge_file.seek(0)
-        copy_sql = f"COPY {edge_type} FROM STDIN WITH CSV HEADER QUOTE '\"' DELIMITER ',' ESCAPE '\\'"
+        copy_sql = f"COPY {edge_type} FROM STDIN WITH CSV QUOTE '\"' DELIMITER ',' ESCAPE '\\'"
         cursor.copy_expert(copy_sql, edge_file)
         raw_connection.commit()
 
@@ -296,11 +296,11 @@ def add_calculated_edges(session: Session,
     edges = open(edges_path, 'r')
     format_edges(session, edges, protein_set, pheno_set, metabo_set, variant_set)
 
-    if extra_edge_paths:
-        logger.debug("Loading extra data files")
-        extra_data = load_extra(extra_edge_paths)
-        extra_data.seek(0)
-        format_edges(session, extra_data, protein_set, pheno_set, metabo_set, variant_set)
+    # if extra_edge_paths:
+    #     logger.debug("Loading extra data files")
+    #     extra_data = load_extra(extra_edge_paths)
+    #     extra_data.seek(0)
+    #     format_edges(session, extra_data, protein_set, pheno_set, metabo_set, variant_set)
 
 
 if __name__ == '__main__':

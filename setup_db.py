@@ -4,7 +4,7 @@ from utils.settings import *
 from nodes.cohort_nodes import *
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from edges.calculated_edges2 import add_calculated_edges
+from edges.calculated_edges import add_calculated_edges
 from sqlalchemy import URL, text, MetaData, create_engine
 
 from nodes.proteins import read_protein_id_chris, get_protein_nodes, get_protein_interactions

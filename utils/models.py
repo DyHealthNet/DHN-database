@@ -149,10 +149,11 @@ class EffectsVariantProtein(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -161,10 +162,11 @@ class EffectsVariantMetabolite(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -173,10 +175,11 @@ class EffectsVariantPhenotype(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -185,10 +188,11 @@ class EffectsProteinProtein(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id_1 = Column(String, ForeignKey('cohort_protein.cohort_id'))
     protein_id_2 = Column(String, ForeignKey('cohort_protein.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -197,10 +201,11 @@ class EffectsProteinMetabolite(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -209,10 +214,11 @@ class EffectsProteinPhenotype(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -221,10 +227,11 @@ class EffectsMetaboliteMetabolite(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id_1 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     metabolite_id_2 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -233,10 +240,11 @@ class EffectsMetabolitePhenotype(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
@@ -245,10 +253,11 @@ class EffectsPhenotypePhenotype(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     phenotype_id_1 = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
     phenotype_id_2 = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
+    np_p_value = Column(JSON)
+    np_effect_size = Column(JSON)
+    np_test_statistic = Column(String)
     p_value = Column(JSON)
-    adjusted_p_value = Column(Float)
     effect_size = Column(JSON)
-    effect_size_type = Column(String)
     test_statistic = Column(String)
 
 
