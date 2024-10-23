@@ -4,6 +4,7 @@
 # 2. load info files for label names
 # 3. convert label names to proper names
 # 4. add the edges to the database
+import sys
 from io import StringIO
 
 import pandas as pd
@@ -226,7 +227,7 @@ def copy_from_buffer(session, edge_type, edge_file):
     raw_connection = session.connection().connection
     with raw_connection.cursor() as cursor:
         edge_file.seek(0)
-        copy_sql = f"COPY {edge_type} FROM STDIN WITH CSV QUOTE '\"' DELIMITER ',' ESCAPE '\\'"
+        copy_sql = f"COPY {edge_type} FROM STDIN WITH (FORMAT CSV, DELIMITER ',', QUOTE '\"')"
         cursor.copy_expert(copy_sql, edge_file)
         raw_connection.commit()
 
