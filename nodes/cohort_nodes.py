@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, declarative_base
 from utils.models import (Phenotype, Disorder, Metabolite, Protein, CohortPhenotype, CohortProtein, CohortMetabolite,
                           CohortVariant, CohortReferencesVariant, GenomicVariant, CohortReferencesMetabolite,
                           CohortReferencesProtein, CohortReferencesPhenotype, CohortReferencesDisease)
-from utils.settings import COHORT_COLUMNS
+from utils.settings import COHORT_COLUMNS, ID_PREFIX, INPUT_ID_DB
 from utils.logger import get_logger
 import pandas as pd
 
@@ -24,16 +24,16 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
     logger.debug("Adding cohort phenotype data to the database.")
     u_id, dp_name, desc, xrefs = get_cols('phenotype')
 
-    # from the database, get the snomed ids and associated hpo ids/ mondo ids
+    # from the database, get the phenotype reference ids and associated hpo ids/ mondo ids
     phenotypes = session.query(Phenotype).filter(Phenotype.observation_source == obs_source).all()
     disorders = session.query(Disorder).filter(Disorder.observation_source == obs_source).all()
 
-    # map the snomed ids to the hpo ids
-    snomed_map = {[y.split('.')[1] for y in x.xrefs if y.startswith('snomedct.')][0]: x.hpo_id for x in phenotypes}
-    snomed_map.update(
-        {[y.split('.')[1] for y in x.xrefs if y.startswith('snomedct.')][0]: x.mondo_id for x in disorders})
+    # map the phenotypre reference ids to the hpo ids
+    pheno_id_map = {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: x.hpo_id for x in phenotypes}
+    pheno_id_map.update(
+        {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: x.mondo_id for x in disorders})
 
-    logger.debug(f"Length of snomed map: {len(snomed_map)}")
+    logger.debug(f"Length of pheno id map: {len(pheno_id_map)}")
     # read the phenotype data
     raw_phenotypes = pd.read_csv(phenotype_path, sep='\t')
     raw_phenotypes[xrefs] = raw_phenotypes[xrefs].fillna('')
@@ -43,20 +43,20 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
     phenotype_references_to_add = []
     missing = set()
     for index, row in raw_phenotypes.iterrows():
-        display_name = row[dp_name] if row[dp_name] and isinstance(row[dp_name], str) else row['label']
+        display_name = row[dp_name] if row[dp_name] and isinstance(row[dp_name], str) else row[COHORT_COLUMNS['phenotype']['unique_id']]   # TODO change 'label' to settings value
         new_phenotype = CohortPhenotype(cohort_id=row[u_id], display_name=display_name,
                                         description=row[desc],
-                                        xrefs="|".join([f"snomedct.{x}" for x in row[xrefs].split(';')]))
+                                        xrefs="|".join([f"{ID_PREFIX}.{x}" for x in row[xrefs].split(';')]))
         phenotypes_to_add.append(new_phenotype)
 
         mondo_id = hpo_id = None
-        for snomed_id in row[xrefs].split(";"):
-            snomed_id = snomed_id.strip()
-            if snomed_id in snomed_map:
-                if snomed_map[snomed_id].startswith('hpo'):
-                    hpo_id = snomed_map[snomed_id]
+        for pheno_id in row[xrefs].split(";"):
+            pheno_id = pheno_id.strip()
+            if pheno_id in pheno_id_map:
+                if pheno_id_map[pheno_id].startswith('hpo'):
+                    hpo_id = pheno_id_map[pheno_id]
                 else:
-                    mondo_id = snomed_map[snomed_id]
+                    mondo_id = pheno_id_map[pheno_id]
 
             # add the references to the knowledge graph for the phenotypes
             if hpo_id:
@@ -66,9 +66,9 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
                 new_reference = CohortReferencesDisease(cohort_id=row[u_id], mondo_id=mondo_id)
                 phenotype_references_to_add.append(new_reference)
             else:
-                missing.add(snomed_id)
+                missing.add(pheno_id)
 
-    logger.info(f"Some SNOMED ids could not be mapped {list(missing)[:min(len(missing) - 1, 5)]} "
+    logger.info(f"Some {INPUT_ID_DB} ids could not be mapped {list(missing)[:min(len(missing) - 1, 5)]} "
                 f"and {max(len(missing) - 5, 0)} more")
     return phenotypes_to_add, disorder_references_to_add, phenotype_references_to_add
 

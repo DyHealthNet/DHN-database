@@ -2,7 +2,7 @@ import requests
 import networkx as nx
 import nedrex
 from nedrex.core import api_keys_active, get_api_key
-from utils.settings import DEBUG
+from utils.settings import DEBUG, ID_PREFIX
 from nedrex.core import iter_nodes, iter_edges
 
 # nedrex.config.set_url_base("https://api.nedrex.net/licensed/")
@@ -12,19 +12,19 @@ if api_keys_active():
     nedrex.config.set_api_key(api_key)
 
 
-def get_disorder_data(snomedct_ids: set[str]) -> list[dict]:
+def get_disorder_data(pheno_ids: set[str]) -> list[dict]:
     """
-    Fetches disorder data from nedrex for a set of snomedct ids
-    :param snomedct_ids: set of snomedct ids to fetch data for
+    Fetches disorder data from nedrex for a set of phenotype reference ids
+    :param pheno_ids: set of phenotype reference ids to fetch data for
     :return: list of dictionaries with disorder data
     """
-    return [node for node in iter_nodes('disorder') if any(domain_id in snomedct_ids for domain_id in node['domainIds'])]
+    return [node for node in iter_nodes('disorder') if any(domain_id in pheno_ids for domain_id in node['domainIds'])]
 
 
 def get_phenotype_data(hpo_ids: set[str]) -> list[dict]:
     """
-    Fetches phenotype data from nedrex for a set of snomedct ids
-    :param hpo_ids: set of snomedct ids to fetch data for
+    Fetches phenotype data from nedrex for a set of phenotype reference ids
+    :param hpo_ids: set of phenotype reference ids to fetch data for
     :return: list of dictionaries with phenotype data
     """
     return [node for node in iter_nodes('phenotype') if node['primaryDomainId'] in hpo_ids]
@@ -64,25 +64,25 @@ def get_harmonizome_data(mondo_id: str) -> dict | None:
 
 
 # this function should be in another file
-def domain_id_to_mondo(disorder_data: list, domain_id: str = 'snomedct') -> dict[str, str]:
+def domain_id_to_mondo(disorder_data: list, domain_id: str = ID_PREFIX) -> dict[str, str]:
     """
-    Creates a dictionary with snomedct codes as keys and mondo ids as values
+    Creates a dictionary with domain_id codes as keys and mondo ids as values
     :param disorder_data: dictionary with disorder data from nedrex
     :param domain_id: domain id to use for the mapping, i.e. snomedct, omim, orpha
-    :return: dictionary with snomedct codes as keys and mondo ids as values
+    :return: dictionary with domain_id codes as keys and mondo ids as values
     """
-    snomed_to_mondo = {}
-    # go through all drug data and check if it has a snomedct code
+    pheno_id_to_mondo = {}
+    # go through all drug data and check if it has a domain_id code
     for disorder in disorder_data:
         if not 'domainIds' in disorder:
             continue
 
         for domain in disorder['domainIds']:
             if domain.startswith(domain_id):
-                snomed_to_mondo[domain] = disorder['primaryDomainId']
-    return snomed_to_mondo
+                pheno_id_to_mondo[domain] = disorder['primaryDomainId']
+    return pheno_id_to_mondo
 
-
+#TODO why directed?
 def get_edge_associations(node_ids: set[str], edge_type='gene_associated_with_disorder', direction='directed') -> nx.Graph:
     """
     Fetches all edges of a certain type that are associated with a set of node ids

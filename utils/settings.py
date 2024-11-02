@@ -2,6 +2,40 @@ import dotenv
 import os
 from utils.logger import get_logger
 
+# final id prefix in db and on NeDRex
+valid_db_to_id_prefix = {
+    'SNOMED CT':'snomedct',
+    'MONDO':'mondo',
+    'MedDRA':'medra',
+    'UMLS':'umls',
+    'DOID':'doid',
+    'NCIt':'ncit',
+    'ORPHA net':'orpha'
+}
+
+valid_db_to_hpo_prefix = {
+    'SNOMED CT':['SNOMEDCT_US','SNOMED_CT'],
+    'MONDO':'MONDO',
+    'UMLS':'UMLS',
+    'DOID':'DOID',
+    'NCIt':'NCIT',
+    'ORPHA':'ORPHA',
+    'MedDRA':'MEDDRA',
+    # Not in NeDRex therefor currently never used
+    'Fyler Code':'Fyler',
+    'PubMed':'PMID',
+    'EFO':'EFO',
+    'MPATH':'MPATH',
+    'MP':'MP',
+    'EPCC':'EPCC',
+    'ICD-9': 'ICD-9',
+    'ICD9':'ICD9',
+    'ICD-10': 'ICD-10',
+    'ICD10': 'ICD10',
+    'ICD-O': 'ICD-O',
+    'COHD': 'COHD',
+}
+
 logger = get_logger(__name__)
 
 
@@ -29,6 +63,16 @@ EDGES_PATH = os.getenv("CALCULATED_EDGES_PATH")
 DATA_DIR = os.getenv("DATA_DIR")
 EXTRA_EDGES = os.getenv("EXTRA_EDGES")
 VARIANT_META_PATH = os.getenv("VARIANT_META_PATH")
+
+INPUT_ID_DB = os.getenv("INPUT_DB_ID")
+ID_PREFIX = valid_db_to_id_prefix.get(INPUT_ID_DB, None)
+# If User input nedrex ID prefix instead of DB/ Ontology name
+# if INPUT_ID_DB in valid_db_to_id_prefix.values():
+#     for key, value in valid_db_to_id_prefix.items():
+#         if value == ID_PREFIX:
+#             INPUT_ID_DB = key
+#             ID_PREFIX = value
+HPO_ID_PREFIX = valid_db_to_hpo_prefix.get(INPUT_ID_DB, None)
 
 # Cohort Columns
 COHORT_COLUMNS = {
@@ -75,6 +119,8 @@ logger.debug(f"DATA_DIR: {DATA_DIR}")
 logger.debug("---------- Cohort Columns ----------")
 logger.debug(f"Protein columns: {COHORT_COLUMNS['protein']}")
 logger.debug(f"Phenotype columns: {COHORT_COLUMNS['phenotype']}")
+logger.debug(f"Phenotype ID Type: Database: {INPUT_ID_DB}, Prefix (NeDRex API): "
+             f"{ID_PREFIX}, Prefix (HPO API): {HPO_ID_PREFIX}")
 logger.debug(f"Metabolite columns: {COHORT_COLUMNS['metabolite']}")
 logger.debug(f"Variant columns: {COHORT_COLUMNS['variant']}")
 logger.debug("---------- Miscellaneous ----------")

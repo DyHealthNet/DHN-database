@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from utils.query_nedrex import domain_id_to_mondo, get_edge_associations, get_harmonizome_data
-from utils.settings import COHORT_COLUMNS
+from utils.settings import COHORT_COLUMNS, HPO_ID_PREFIX, ID_PREFIX, INPUT_ID_DB
 from utils.models import Gene, Disorder, GeneAssocDisorder, Phenotype, DisorderAssocPhenotype
 from utils.logger import get_logger
 
@@ -64,19 +64,18 @@ def read_hpo_ontology(hpo_path: str) -> dict:
         hpo = json.load(f)
     return hpo
 
-
-def get_needed_snomed_ids(phenotype_path: str) -> set[str]:
+def get_needed_pheno_ids(phenotype_path: str) -> set[str]:
     """
-    Extracts snomed ids from a phenotype file
+    Extracts phenotype reference ids from a phenotype file
     :param phenotype_path: path to phenotype file
     :return: dataframe with phenotype data
     """
     df = pd.read_csv(phenotype_path, sep='\t')
-    unique_snomed = df[COHORT_COLUMNS['phenotype']['xref']].unique()
-    snomeds = [snomed for sublist in [str(snomed).split(';') for snomed in unique_snomed] for snomed in sublist]
-    logger.debug(f"Found {len(df)} phenotypes with {len(snomeds)} unique snomed ids")
-    snomeds = set([snomed.strip() for snomed in snomeds if snomed != "nan"])
-    return snomeds
+    unique_pheno = df[COHORT_COLUMNS['phenotype']['xref']].unique()
+    pheno_ids = [pheno for sublist in [str(pheno).split(';') for pheno in unique_pheno] for pheno in sublist]
+    logger.debug(f"Found {len(df)} phenotypes with {len(pheno_ids)} unique phenotype ids")
+    pheno_ids = set([pheno.strip() for pheno in pheno_ids if pheno != "nan"])
+    return pheno_ids
 
 
 def ontology_data_to_network(hpo_data: dict) -> nx.Graph:
@@ -96,88 +95,98 @@ def ontology_data_to_network(hpo_data: dict) -> nx.Graph:
     return graph
 
 
-def snomed_from_hpo_api(hpo_data: list, needed_snomed_ids: set[str]) -> dict:
-    snomed_ids = {}
+def pheno_ids_from_hpo_api(hpo_data: list, needed_pheno_ids: set[str]) -> dict:
+    pheno_ids = {}
     for node in hpo_data:
         xrefs = node.get('xrefs', [])
         for ref in xrefs:
-            if 'SNOMEDCT_US' not in ref:
+            if isinstance(HPO_ID_PREFIX, str):
+                if HPO_ID_PREFIX not in ref:
+                    continue
+            elif not any(prefix in ref for prefix in HPO_ID_PREFIX):
                 continue
-            snomed_id = ref.split(':')[-1]
-            if snomed_id in needed_snomed_ids:
-                snomed_ids[snomed_id] = node['id']
-    return snomed_ids
+            pheno_id = ref.split(':')[-1]
+            if pheno_id in needed_pheno_ids:
+                pheno_ids[pheno_id] = node['id']
+    return pheno_ids
 
 
-def snomed_from_hpo(hpo_data: nx.Graph | list, needed_snomed_ids: set[str]) -> dict:
+def pheno_ids_from_hpo(hpo_data: nx.Graph | list, needed_pheno_ids: set[str]) -> dict:
     if isinstance(hpo_data, nx.Graph):
-        snomed_ids = snomed_from_hpo_graph(hpo_data, needed_snomed_ids)
+        pheno_ids = pheno_ids_from_hpo_graph(hpo_data, needed_pheno_ids)
     else:
-        snomed_ids = snomed_from_hpo_api(hpo_data, needed_snomed_ids)
-    return snomed_ids
+        pheno_ids = pheno_ids_from_hpo_api(hpo_data, needed_pheno_ids)
+    return pheno_ids
 
 
-def snomed_from_hpo_graph(hpo_graph, needed_snomed_ids) -> dict:
+def pheno_ids_from_hpo_graph(hpo_graph, needed_pheno_ids) -> dict:
     """
-    Find the SNOMED ids in the HPO ontology that are needed
+    Find the phenotype reference ids in the HPO ontology that are needed
     :param hpo_graph: Graph of the HPO ontology
-    :param needed_snomed_ids: set of snomed ids that are needed
-    :return: mapping from snomed ids to HPO ids
+    :param needed_pheno_ids: set of phenotype reference ids that are needed
+    :return: mapping from phenotype reference ids to HPO ids
     """
-    snomed_ids = {}
+    pheno_ids = {}
     for node in hpo_graph.nodes(data=True):
         xrefs = node[1].get('xrefs', [])
         for xref in xrefs:
-            if xref['val'].startswith('SNOMEDCT_US:'):
-                snomed_id = xref['val'].split(':')[-1]
-                if snomed_id in needed_snomed_ids:
+            #TODO check if change back (delete if else and decomment)
+            if isinstance(HPO_ID_PREFIX, str):
+                if not xref['val'].startswith(HPO_ID_PREFIX):
+                    continue
+            elif not any(xref['val'].startswith(prefix) for prefix in HPO_ID_PREFIX):
+                continue
+            else:
+            #if xref['val'].startswith(HPO_ID_PREFIX):
+                pheno_id = xref['val'].split(':')[-1]
+                if pheno_id in needed_pheno_ids:
                     hpo_id = node[0].split('/')[-1].replace('_', ':')
-                    snomed_ids[snomed_id] = hpo_id
-    return snomed_ids
+                    pheno_ids[pheno_id] = hpo_id
+    return pheno_ids
 
 
-def hpo_to_xref(data_dir, snomed_id_mapping) -> dict:
+#TODO return directly if current pheno_id are already OMIM/ORPHA Ids
+def hpo_to_xref(data_dir, pheno_id_mapping) -> dict:
     """
-    Reads the HPOA file and maps the snomed ids to OMIM or ORPHA ids
+    Reads the HPOA file and maps the phenotype reference ids to OMIM or ORPHA ids
     :param data_dir: directory where the HPOA file is stored
-    :param snomed_id_mapping: mapping from snomed ids to HPO ids
-    :return: mapping from snomed ids to OMIM or ORPHA ids
+    :param pheno_id_mapping: mapping from phenotype reference ids to HPO ids
+    :return: mapping from phenotype reference ids to OMIM or ORPHA ids
     """
     # read the HPOA file
     hpoa = pd.read_csv(f'{data_dir}/phenotype.hpoa', sep='\t', comment='#', low_memory=False)
     # convert the hpoa to a dict with hpo_id as key, database_id as value
     hpoa_database = hpoa.set_index('hpo_id')['database_id'].to_dict()
-    # convert the snomed_id_mapping to a dict with snomed_id as key, hpo_id as value
-    snomed_to_omim = {}
-    for key, value in snomed_id_mapping.items():
+    # convert the pheno_id_mapping to a dict with pheno_id as key, hpo_id as value
+    curr_pheno_id_to_omim = {}
+    for key, value in pheno_id_mapping.items():
         try:
-            snomed_to_omim[key] = hpoa_database[value]
+            curr_pheno_id_to_omim[key] = hpoa_database[value]
         except KeyError:
             pass
-    return snomed_to_omim
+    return curr_pheno_id_to_omim
 
-
-def disorder_to_mondo(disease_data, snomed_to_db) -> dict:
+def disorder_to_mondo(disease_data, pheno_id_to_db) -> dict:
     """
-    Convert the snomed ids to OMIM or ORPHA ids and then to Mondo ids
+    Convert the phenotype reference ids to OMIM or ORPHA ids and then to Mondo ids
     :param disease_data: disease data from the NEDREx API
-    :param snomed_to_db: mapping from snomed ids to OMIM or ORPHA ids
-    :return: mapping from snomed ids to Mondo ids
+    :param pheno_id_to_db: mapping from phenotype reference ids to OMIM or ORPHA ids
+    :return: mapping from phenotype reference ids to Mondo ids
     """
     omim_ids = domain_id_to_mondo(disease_data, 'omim')
     orpha_ids = domain_id_to_mondo(disease_data, 'orpha')
-    snomed_to_mondo = {}
-    for key, value in snomed_to_db.items():
+    pheno_id_to_mondo = {}
+    for key, value in pheno_id_to_db.items():
         raw_id = value.split(':')[-1]
         if value.startswith('OMIM'):
-            snomed_to_mondo[key] = omim_ids.get(raw_id, None)
+            pheno_id_to_mondo[key] = omim_ids.get(raw_id, None)
         elif value.startswith('ORPHA'):
-            snomed_to_mondo[key] = orpha_ids.get(raw_id, None)
+            pheno_id_to_mondo[key] = orpha_ids.get(raw_id, None)
     # remove the None values
-    return {k: v for k, v in snomed_to_mondo.items() if v is not None}
+    return {k: v for k, v in pheno_id_to_mondo.items() if v is not None}
 
 
-def mondo_to_phenotype(pheno_data, assoc_graph, snomed_hpo_map) -> dict:
+def mondo_to_phenotype(pheno_data, assoc_graph, pheno_id_hpo_map) -> dict:
     """
     Convert the Mondo ids to phenotype ids
     :param pheno_data: phenotype data from the NEDREx API
@@ -185,7 +194,7 @@ def mondo_to_phenotype(pheno_data, assoc_graph, snomed_hpo_map) -> dict:
     :return: mapping from Mondo ids to phenotype (hpo) ids
     """
     mondo_to_pheno = {}
-    relevant_hpo_ids = set(snomed_hpo_map.values())
+    relevant_hpo_ids = set(pheno_id_hpo_map.values())
     for _, pheno_id in pheno_data.items():
         if pheno_id in assoc_graph and pheno_id in relevant_hpo_ids:
             mondo_ids = assoc_graph[pheno_id]
@@ -231,31 +240,32 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
     return genes, sources
 
 
-def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, str], descriptions: dict[str, str],
+def retrieve_disorder_data(needed_pheno_ids: set[str], pheno_ids_to_mondo: dict[str, str], descriptions: dict[str, str],
                            xrefs: dict, display_names: dict, gene_info: dict, assoc_graph: nx.Graph,
                            obs_source: str = None) -> tuple[set, set, set, int]:
     """
-    Queries the needed snomed ids and retrieves the associated genes and disorders from NeDRex
+    Queries the needed phenotype reference ids and retrieves the associated genes and disorders from NeDRex
     :param display_names: Display names for the mondo ids
     :param gene_info: Information about the genes needed for the database (display name, synonyms, etc.)
     :param xrefs: cross references for the mondo ids to other databases
     :param descriptions: descriptions for the mondo ids
-    :param needed_snomed: snomed ids in the dataset
-    :param snomed_to_mondo: map from snomed to mondo ids from nedrex
+    :param needed_pheno_ids: phenotype reference ids in the dataset
+    :param pheno_ids_to_mondo: map from phenotype reference ids to mondo ids from nedrex
     :param assoc_graph: association graph from nedrex of mondo ids to genes
     :param obs_source: Describes the source of observations - e.g. CHRIS
     :return: list of genes to add, list of disorders to add, list of gene associations to add,
-    number of snomed ids found
+    number of phenotype reference ids found
     """
     gene_associations = set()
     genes_to_add = set()
     disorders = set()
     found = 0
-    for snomed in needed_snomed:
-        # check if ; in snomed id and if so, do this for all ids
-        snomed_ids = str(snomed).split(';')
-        for snomed_id in snomed_ids:
-            mondo_id = snomed_to_mondo.get(snomed_id)
+    #found = set()
+    for pheno in needed_pheno_ids:
+        # check if ; in phenotype reference id and if so, do this for all ids
+        pheno_ids = str(pheno).split(';') #TODO this should already been taken care of in get_needed_pheno_ids() and if not Ids are probably wrong because the prefix is added element before
+        for pheno_id in pheno_ids:
+            mondo_id = pheno_ids_to_mondo.get(pheno_id, None)
             xref = xrefs.get(mondo_id, None)
             description = descriptions.get(mondo_id, None)
             display_name = display_names.get(mondo_id, None)
@@ -287,6 +297,7 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
             found += 1
+            #found.add(pheno_id)
         continue
     return genes_to_add, disorders, gene_associations, found
 
@@ -294,15 +305,15 @@ def retrieve_disorder_data(needed_snomed: set[str], snomed_to_mondo: dict[str, s
 def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_source: str = None) \
         -> tuple[set, set, set, int]:
     """
-    Retrieve the phenotype data for the needed snomed ids
+    Retrieve the phenotype data for the needed phenotype reference ids
     # HPO conversion: Pathway
-    # HPO data (HPO_ID ----> SNOMED_ID) - look for needed SNOMED IDs
-    # -> map to Mondo (SNOMED_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
+    # HPO data (HPO_ID ----> INPUT_ID) - look for needed phenotype reference IDs
+    # -> map to Mondo (INPUT_ID -- OMIM_ID/ORPHA_ID --> Mondo_ID)
     #
 
     :param obs_source: Describes the source of observations - e.g. CHRIS
     :param additional_data: dictionary with additional data for the hpo ids, must be a dictionary with hpo ids as keys
-    :param available_ids: dictionary with snomed ids as keys and hpo ids as values
+    :param available_ids: dictionary with phenotype ids as keys and hpo ids as values
     :return: dictionary with the phenotype data
     """
     found = 0
@@ -310,22 +321,22 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_sour
     phenotypes = set()
     disorder_associations = set()
 
-    available_snomed_ids = available_ids
-    # go through all the nodes in the HPO graph and find the ones that have xrefs to SNOMED
+    available_pheno_ids = available_ids
+    # go through all the nodes in the HPO graph and find the ones that have xrefs to the phenotype ID DB #TODO?
 
-    logger.debug(f'Found {len(available_snomed_ids)} snomed ids in the HPO ontology')
+    logger.debug(f'Found {len(available_pheno_ids)} {INPUT_ID_DB} ids in the HPO ontology')
 
     # get edge associations for disorder_has_phenotype
-    assoc_graph = get_edge_associations(set(available_snomed_ids.values()), edge_type='disorder_has_phenotype')
+    assoc_graph = get_edge_associations(set(available_pheno_ids.values()), edge_type='disorder_has_phenotype')
 
     # find the genes that are associated with the mondo ids
-    for snomed_id, hpo_id in available_snomed_ids.items():
-        snomed_id = f"snomedct.{snomed_id}"
+    for pheno_id, hpo_id in available_pheno_ids.items():
+        pheno_id = f"{ID_PREFIX}.{pheno_id}"
         if additional_data.get(hpo_id, None) is None:
             continue
         phenotype_data = additional_data[hpo_id]
         phenotypes.add(Phenotype(hpo_id=hpo_id,
-                                 xrefs=set(phenotype_data['domainIds'] + [snomed_id]),
+                                 xrefs=set(phenotype_data['domainIds'] + [pheno_id]),
                                  description=phenotype_data['description'],
                                  synonyms=phenotype_data['synonyms'],
                                  display_name=phenotype_data['displayName'],
