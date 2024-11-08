@@ -28,10 +28,16 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
     phenotypes = session.query(Phenotype).filter(Phenotype.observation_source == obs_source).all()
     disorders = session.query(Disorder).filter(Disorder.observation_source == obs_source).all()
 
-    # map the phenotypre reference ids to the hpo ids
-    pheno_id_map = {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: x.hpo_id for x in phenotypes}
+    # map the phenotype reference ids to the hpo ids
+    pheno_id_map = {}
+    for x in phenotypes:
+        if [y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0] in pheno_id_map:
+            pheno_id_map[[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]].append(x.hpo_id)
+        else:
+            pheno_id_map[[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX + '.')][0]] = [x.hpo_id]
+    #pheno_id_map = {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: x.hpo_id for x in phenotypes}
     pheno_id_map.update(
-        {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: x.mondo_id for x in disorders})
+        {[y.split('.')[1] for y in x.xrefs if y.startswith(ID_PREFIX+'.')][0]: [x.mondo_id] for x in disorders})
 
     logger.debug(f"Length of pheno id map: {len(pheno_id_map)}")
     # read the phenotype data
@@ -53,18 +59,14 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
         for pheno_id in row[xrefs].split(";"):
             pheno_id = pheno_id.strip()
             if pheno_id in pheno_id_map:
-                if pheno_id_map[pheno_id].startswith('hpo'):
-                    hpo_id = pheno_id_map[pheno_id]
-                else:
-                    mondo_id = pheno_id_map[pheno_id]
-
-            # add the references to the knowledge graph for the phenotypes
-            if hpo_id:
-                new_reference = CohortReferencesPhenotype(cohort_id=row[u_id], hpo_id=hpo_id)
-                disorder_references_to_add.append(new_reference)
-            elif mondo_id:
-                new_reference = CohortReferencesDisease(cohort_id=row[u_id], mondo_id=mondo_id)
-                phenotype_references_to_add.append(new_reference)
+                for id in pheno_id_map[pheno_id]:
+                    # add the references to the knowledge graph for the phenotypes
+                    if id.startswith('hpo'):
+                        new_reference = CohortReferencesPhenotype(cohort_id=row[u_id], hpo_id=id)
+                        disorder_references_to_add.append(new_reference)
+                    else:
+                        new_reference = CohortReferencesDisease(cohort_id=row[u_id], mondo_id=id)
+                        phenotype_references_to_add.append(new_reference)
             else:
                 missing.add(pheno_id)
 

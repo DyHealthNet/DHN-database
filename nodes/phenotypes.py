@@ -107,7 +107,10 @@ def pheno_ids_from_hpo_api(hpo_data: list, needed_pheno_ids: set[str]) -> dict:
                 continue
             pheno_id = ref.split(':')[-1]
             if pheno_id in needed_pheno_ids:
-                pheno_ids[pheno_id] = node['id']
+                if pheno_id in pheno_ids:
+                    pheno_ids[pheno_id].append(node['id'])
+                else:
+                    pheno_ids[pheno_id] = [node['id']]
     return pheno_ids
 
 
@@ -242,7 +245,7 @@ def mondo_in_association_graph(mondo_id: str, assoc_graph: nx.Graph) -> tuple[li
 
 def retrieve_disorder_data(needed_pheno_ids: set[str], pheno_ids_to_mondo: dict[str, str], descriptions: dict[str, str],
                            xrefs: dict, display_names: dict, gene_info: dict, assoc_graph: nx.Graph,
-                           obs_source: str = None) -> tuple[set, set, set, int]:
+                           obs_source: str = None) -> tuple[set, set, set, set]:
     """
     Queries the needed phenotype reference ids and retrieves the associated genes and disorders from NeDRex
     :param display_names: Display names for the mondo ids
@@ -259,8 +262,8 @@ def retrieve_disorder_data(needed_pheno_ids: set[str], pheno_ids_to_mondo: dict[
     gene_associations = set()
     genes_to_add = set()
     disorders = set()
-    found = 0
-    #found = set()
+    #found = 0
+    found = set()
     for pheno in needed_pheno_ids:
         # check if ; in phenotype reference id and if so, do this for all ids
         pheno_ids = str(pheno).split(';') #TODO this should already been taken care of in get_needed_pheno_ids() and if not Ids are probably wrong because the prefix is added element before
@@ -296,8 +299,8 @@ def retrieve_disorder_data(needed_pheno_ids: set[str], pheno_ids_to_mondo: dict[
             # add gene associations to set for each source
             gene_associations.update([GeneAssocDisorder(entrez_id=gene, mondo_id=mondo_id, edge_source=source)
                                       for gene, source in zip(genes, sources)])
-            found += 1
-            #found.add(pheno_id)
+            #found += 1
+            found.add(pheno_id.split('.')[-1])
         continue
     return genes_to_add, disorders, gene_associations, found
 
@@ -317,7 +320,7 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_sour
     :return: dictionary with the phenotype data
     """
     found = 0
-    genes_to_add = set()
+    genes_to_add = set() #TODO why is this here
     phenotypes = set()
     disorder_associations = set()
 
@@ -327,30 +330,31 @@ def retrieve_phenotype_data(available_ids: dict, additional_data: dict, obs_sour
     logger.debug(f'Found {len(available_pheno_ids)} {INPUT_ID_DB} ids in the HPO ontology')
 
     # get edge associations for disorder_has_phenotype
-    assoc_graph = get_edge_associations(set(available_pheno_ids.values()), edge_type='disorder_has_phenotype')
+    assoc_graph = get_edge_associations(set(el for v in available_pheno_ids.values() for el in v), edge_type='disorder_has_phenotype')
 
     # find the genes that are associated with the mondo ids
-    for pheno_id, hpo_id in available_pheno_ids.items():
+    for pheno_id, hpo_ids in available_pheno_ids.items():
         pheno_id = f"{ID_PREFIX}.{pheno_id}"
-        if additional_data.get(hpo_id, None) is None:
-            continue
-        phenotype_data = additional_data[hpo_id]
-        phenotypes.add(Phenotype(hpo_id=hpo_id,
-                                 xrefs=set(phenotype_data['domainIds'] + [pheno_id]),
-                                 description=phenotype_data['description'],
-                                 synonyms=phenotype_data['synonyms'],
-                                 display_name=phenotype_data['displayName'],
-                                 observation_source=obs_source))
-        if hpo_id not in assoc_graph:
-            continue
-        # get the disorder ids associated with the hpo id
-        for edge in assoc_graph.edges(hpo_id, data=True):
-            disorder = edge[1]
-            source = edge[2]['source'][0]
-            new_assoc = DisorderAssocPhenotype(mondo_id=disorder, hpo_id=hpo_id, edge_source=source)
-            disorder_associations.add(new_assoc)
+        for hpo_id in hpo_ids:
+            if additional_data.get(hpo_id, None) is None:
+                continue
+            phenotype_data = additional_data[hpo_id]
+            phenotypes.add(Phenotype(hpo_id=hpo_id,
+                                     xrefs=set(phenotype_data['domainIds'] + [pheno_id]),
+                                     description=phenotype_data['description'],
+                                     synonyms=phenotype_data['synonyms'],
+                                     display_name=phenotype_data['displayName'],
+                                     observation_source=obs_source))
+            found += 1
+            if hpo_id not in assoc_graph:
+                continue
+            # get the disorder ids associated with the hpo id
+            for edge in assoc_graph.edges(hpo_id, data=True):
+                disorder = edge[1]
+                source = edge[2]['source'][0]
+                new_assoc = DisorderAssocPhenotype(mondo_id=disorder, hpo_id=hpo_id, edge_source=source)
+                disorder_associations.add(new_assoc)
 
-        found += 1
     return genes_to_add, phenotypes, disorder_associations, found
 
 

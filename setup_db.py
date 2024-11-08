@@ -73,7 +73,7 @@ def add_items(session: Session, items: iter, column: type[DeclarativeBase], filt
     for item in items:
         filter_values = {key: getattr(item, key) for key in filter_args}
         exists = session.query(column).filter_by(**filter_values).first()
-        if exists is not None and DEBUG:
+        if exists is not None and False:#DEBUG:
             # remove existing item
             try:
                 session.delete(exists)
@@ -104,11 +104,12 @@ def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[
     :return: None
     """
     if missing_ids is None:
-        needed_pheno_ids = get_needed_pheno_ids(file_path)
-        needed_pheno_ids = {f"{ID_PREFIX}.{x}" for x in needed_pheno_ids}
+        needed_pheno_ids_no_prefix = get_needed_pheno_ids(file_path)
+        needed_pheno_ids = {f"{ID_PREFIX}.{x}" for x in needed_pheno_ids_no_prefix}
         data = get_disorder_data(needed_pheno_ids)
         domain_to_mondo = domain_id_to_mondo(data)
     else:
+        needed_pheno_ids_no_prefix = missing_ids
         missing_ids = {f"omim.{x}" for x in missing_ids}
         data = get_disorder_data(missing_ids)
         domain_to_mondo = domain_id_to_mondo(data, 'omim')
@@ -135,8 +136,11 @@ def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[
     add_items(session, gene_assocs, GeneAssocDisorder, ['entrez_id', 'mondo_id'])
     session.commit()
     logger.info(f"Found and successfully added {len(found)} {INPUT_ID_DB} ids with diseases to db")
-    #missing_ids = needed_pheno_ids - found
-    #add_phenotype_data(db_session, file_path=None, data_dir=DATA_DIR, missing_ids=missing_ids, obs_source=OBSERVATIONS)
+    # Search for the remaining missing IDs (if any) in NeDRex for phenotype nodes
+    curr_missing_ids = list(needed_pheno_ids_no_prefix - found)
+    if len(curr_missing_ids) > 0 and missing_ids is None:
+        logger.info(f"Adding phenotype...")
+        add_phenotype_data(db_session, file_path=None, data_dir=DATA_DIR, missing_ids=curr_missing_ids, obs_source=OBSERVATIONS)
 
 def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = '../data', missing_ids: list = None,
                        obs_source: str = None):
@@ -145,7 +149,7 @@ def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = 
     :param obs_source: Describes the source of observations - e.g. CHRIS
     :param session: Database session object
     :param file_path: str, path to file with phenotype data if None only missing_ids will be added
-    :param missing_ids: Optional - set of hpo ids to add to the database. Use this to add missing hpo ids from
+    :param missing_ids: Optional - set of phenotype ids to add to the database. Use this to add missing hpo ids from
     :param data_dir: str, path to the data directory
     :return: None
     """
@@ -175,8 +179,9 @@ def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = 
 
     available_pheno_ids = pheno_ids_from_hpo(hpo_graph, needed_ids)
 
-    available_pheno_ids = {k: v.replace(':', '.').replace('HP', 'hpo') for k, v in available_pheno_ids.items()}
-    pheno_data = get_phenotype_data(set(available_pheno_ids.values()))
+    available_pheno_ids = {key: [v.replace(':', '.').replace('HP', 'hpo') for v in values]
+                           for key, values in available_pheno_ids.items()}
+    pheno_data = get_phenotype_data(set(el for v in available_pheno_ids.values() for el in v))
 
     additional_data = {item['primaryDomainId']: item for item in pheno_data}
     genes_to_add, phenotypes, disorder_associations, _ = retrieve_phenotype_data(available_pheno_ids, additional_data,
@@ -184,27 +189,28 @@ def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = 
 
     # since some phenotypes are subtypes of disorders, we only add phenotypes that are
     # not already in the disorder database
-    removable_phenotypes = []
-    removable_associations = []
+    removable_phenotypes = set()  #TODO why not use set() directly?
+    removable_associations = set()
 
-    for phenotype in phenotypes:
-        pheno_ids = [x for x in phenotype.xrefs if ID_PREFIX in x][0]
-        items_disorder = session.query(Disorder).filter(Disorder.xrefs.any(pheno_ids)).first()
-        if not items_disorder:
-            continue
-        removable_phenotypes.append(phenotype)
+    if missing_ids is None:
+        for phenotype in phenotypes:
+            pheno_ids = [x for x in phenotype.xrefs if ID_PREFIX in x][0]
+            items_disorder = session.query(Disorder).filter(Disorder.xrefs.any(pheno_ids)).first()
+            if not items_disorder:
+                continue
+            removable_phenotypes.add(phenotype)
 
-    # also remove associations to phenotypes that are not in the disorder table
+    # also remove associations to phenotypes that are not in the disorder table #TODO why not add missing Disorders?
     for assoc in disorder_associations:
-        if assoc.hpo_id in [x.hpo_id for x in removable_phenotypes]: #TODO faster with static list?
-            removable_associations.append(assoc)
         if session.query(Disorder).filter_by(mondo_id=assoc.mondo_id).first() is None:
-            removable_associations.append(assoc)
+            removable_associations.add(assoc)
+        elif assoc.hpo_id in [x.hpo_id for x in removable_phenotypes]: #TODO faster with static list?
+            removable_associations.add(assoc)
 
     logger.debug(f"Removing {len(removable_phenotypes)} phenotypes and {len(removable_associations)} associations that "
                  f"are already in the disorder database")
-    phenotypes = phenotypes - set(removable_phenotypes)
-    disorder_associations = disorder_associations - set(removable_associations)
+    phenotypes = phenotypes - removable_phenotypes
+    disorder_associations = disorder_associations - removable_associations
 
     add_items(session, genes_to_add, Gene, ['entrez_id'])
     add_items(session, phenotypes, Phenotype, ['hpo_id'])
@@ -421,8 +427,8 @@ if __name__ == '__main__':
     db_session = Session()
 
     # delete all tables and recreate them
-    # delete_tables(db_session)
-    # create_tables()
+    delete_tables(db_session)
+    create_tables()
 
     if not all([EDGES_PATH, DATA_DIR]):
         logger.error("Please provide paths to the edges file and data directory.")
@@ -448,14 +454,14 @@ if __name__ == '__main__':
     logger.info("Initialising Layer 2 of database\n")
 
     # The order at which these functions are called is important
-    # add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
-    #                file_path=VARIANT_META_PATH, obs_source=OBSERVATIONS)
+    add_layer_node(add_variants, "genomic variants", add_genomic_variant_data, session=db_session,
+                   file_path=VARIANT_META_PATH, obs_source=OBSERVATIONS)
 
     add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
                    file_path=PHENO_PATH, obs_source=OBSERVATIONS)
 
-    add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
-                   file_path=PHENO_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
+    # add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
+    #                file_path=PHENO_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
                    file_path=PROTEIN_PATH, obs_source=OBSERVATIONS)
@@ -465,7 +471,7 @@ if __name__ == '__main__':
 
     # second pass for phenotypes
     if add_phenotypes:
-        logger.debug("Doing a second pass for phenotypes to add missing phenotypes")
+        logger.debug("Doing a second pass for phenotypes to add missing phenotypes") #TODO skip phenotype adding here while still adding their disorder associations
         add_phenotype_data(db_session, PHENO_PATH, obs_source='external', data_dir=DATA_DIR)
 
     logger.info("Initialising Layer 1 of database\n")

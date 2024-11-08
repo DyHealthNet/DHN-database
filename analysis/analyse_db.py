@@ -75,6 +75,9 @@ def coverage(session: Session, base_reference: declarative_base, model: declarat
         return None
     if not model_2:
         num_rows = session.query(distinct(model.cohort_id)).count()
+        if total_cohort == 0:
+            logger.warning(f"There are no rows of the table {model.__name__} in the database.")
+            return 0
         return num_rows / total_cohort
 
     rows_1 = session.query(distinct(model.cohort_id)).all()

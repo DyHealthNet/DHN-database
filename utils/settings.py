@@ -119,10 +119,10 @@ logger.debug(f"DATA_DIR: {DATA_DIR}")
 logger.debug("---------- Cohort Columns ----------")
 logger.debug(f"Protein columns: {COHORT_COLUMNS['protein']}")
 logger.debug(f"Phenotype columns: {COHORT_COLUMNS['phenotype']}")
-logger.debug(f"Phenotype ID Type: Database: {INPUT_ID_DB}, Prefix (NeDRex API): "
-             f"{ID_PREFIX}, Prefix (HPO API): {HPO_ID_PREFIX}")
 logger.debug(f"Metabolite columns: {COHORT_COLUMNS['metabolite']}")
 logger.debug(f"Variant columns: {COHORT_COLUMNS['variant']}")
+logger.debug(f"Phenotype ID Type: Database: {INPUT_ID_DB}, Prefix (NeDRex API): "
+             f"{ID_PREFIX}, Prefix (HPO API): {HPO_ID_PREFIX}")
 logger.debug("---------- Miscellaneous ----------")
 logger.debug(f"OBSERVATIONS: {OBSERVATIONS}")
 logger.debug(f"CHUNK_SIZE: {CHUNK_SIZE:,}")
