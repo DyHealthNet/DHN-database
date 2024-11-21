@@ -16,26 +16,66 @@ from utils.settings import *
 
 logger = get_logger(__name__)
 
-
 DB_EDGES = {
-    ('phenotype', 'variant'): "effects_variant_phenotype",
-    ('variant', 'phenotype'): "effects_variant_phenotype",
-    ('variant', 'metabolite'): "effects_variant_metabolite",
-    ('metabolite', 'variant'): "effects_variant_metabolite",
-    ('variant', 'protein'): "effects_variant_protein",
-    ('protein', 'variant'): "effects_variant_protein",
+    ('phenotype', 'variant'): "edges_variant_phenotype",
+    ('variant', 'phenotype'): "edges_variant_phenotype",
+    ('variant', 'metabolite'): "edges_variant_metabolite",
+    ('metabolite', 'variant'): "edges_variant_metabolite",
+    ('variant', 'protein'): "edges_variant_protein",
+    ('protein', 'variant'): "edges_variant_protein",
 
-    ('protein', 'protein'): "effects_protein_protein",
-    ('protein', 'phenotype'): "effects_protein_phenotype",
-    ('phenotype', 'protein'): "effects_protein_phenotype",
-    ('protein', 'metabolite'): "effects_protein_metabolite",
-    ('metabolite', 'protein'): "effects_protein_metabolite",
+    ('protein', 'protein'): "edges_protein_protein",
+    ('protein', 'phenotype'): "edges_protein_phenotype",
+    ('phenotype', 'protein'): "edges_protein_phenotype",
+    ('protein', 'metabolite'): "edges_protein_metabolite",
+    ('metabolite', 'protein'): "edges_protein_metabolite",
 
-    ('metabolite', 'metabolite'): "effects_metabolite_metabolite",
-    ('metabolite', 'phenotype'): "effects_metabolite_phenotype",
-    ('phenotype', 'metabolite'): "effects_metabolite_phenotype",
+    ('metabolite', 'metabolite'): "edges_metabolite_metabolite",
+    ('metabolite', 'phenotype'): "edges_metabolite_phenotype",
+    ('phenotype', 'metabolite'): "edges_metabolite_phenotype",
 
-    ('phenotype', 'phenotype'): "effects_phenotype_phenotype",
+    ('phenotype', 'phenotype'): "edges_phenotype_phenotype",
+}
+
+# Define which columns we need for each test (order matters here!)
+ALL_TESTS = {
+             "pearson": ['pearson_p_unadjusted', 'pearson_p_bonferroni', 'pearson_p_benjamini_hb',
+                         'pearson_p_benjamini_yek', 'pearson_e_r2'],
+             "spearman": ['spearman_p_unadjusted', 'spearman_p_bonferroni', 'spearman_p_benjamini_hb',
+                          'spearman_p_benjamini_yek', 'spearman_e_rho'],
+             "ttest": ['ttest_p_unadjusted', 'ttest_p_bonferroni', 'ttest_p_benjamini_hb',
+                       'ttest_p_benjamini_yek', 'ttest_e_cohens_d'],
+             "anova": ['anova_p_unadjusted', 'anova_p_bonferroni', 'anova_p_benjamini_hb',
+                       'anova_p_benjamini_yek', 'anova_e_np2'],
+             "mwu": ['mwu_p_unadjusted', 'mwu_p_bonferroni', 'mwu_p_benjamini_hb', 'mwu_p_benjamini_yek',
+                     'mwu_e_r'],
+             "kruskal": ['kruskal_p_unadjusted', 'kruskal_p_bonferroni', 'kruskal_p_benjamini_hb',
+                         'kruskal_p_benjamini_yek', 'kruskal_e_eta2'],
+             "chi2": ['chi2_p_unadjusted', 'chi2_p_bonferroni', 'chi2_p_benjamini_hb', 'chi2_p_benjamini_yek',
+                      'chi2_e_cramers_v', 'chi2_e_phi'],
+             "gwas": ['gwas_p_unadjusted', 'gwas_p_bonferroni', 'gwas_e_unspecified']
+             }
+
+# Define the columns we need for each table so that we can order them later when we read the file
+DB_COLUMNS = {
+    "edges_variant_phenotype": ['label1', 'label2'] + ALL_TESTS['gwas'],
+    "edges_variant_metabolite": ['label1', 'label2'] + ALL_TESTS['gwas'],
+    "edges_variant_protein": ['label1', 'label2'] + ALL_TESTS['gwas'],
+
+    "edges_protein_protein": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+    "edges_protein_metabolite": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+
+    "edges_metabolite_metabolite": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+
+    "edges_protein_phenotype": ['label1', 'label2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] + ALL_TESTS['mwu'] +
+                                  ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+
+    "edges_metabolite_phenotype": ['label1', 'label2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] + ALL_TESTS['mwu'] +
+                                     ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+
+    "edges_phenotype_phenotype": ['label1', 'label2'] + ALL_TESTS['chi2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] +
+                                    ALL_TESTS['mwu'] + ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] +
+                                    ALL_TESTS['spearman']
 }
 
 # this gives us information which data type comes first in the column order
@@ -175,11 +215,12 @@ def process_file(edges, protein_set: set, phenotype_set: set, metabolite_set: se
         mapped, types, swap = map_edge(edge, protein_set, phenotype_set, metabolite_set, variant_set)
         return mapped, types if types else None, swap
 
-    edges.readline()
+    columns = edges.readline().strip().split(',')
+    # we need to find the order of the columns and then map it to the table columns that we have for any given table
     for line in edges.readlines():
         if "nan" in line:
             continue
-        line_split = line.split(',')
+        line_split = line.strip().split(',')
         source, dest = line_split[1], line_split[2]
         source_map, dest_map, swap = map_and_filter((source, dest))
         if source_map is None or dest_map is None:
@@ -187,8 +228,13 @@ def process_file(edges, protein_set: set, phenotype_set: set, metabolite_set: se
         edge_map = (source_map, dest_map)
         # swap the labels to match the order in the database
         if swap:
-            line = swap_labels(line, source, dest)
-        all_edge_types[DB_EDGES[edge_map]].write(line)
+            line_split[1], line_split[2] = line_split[2], line_split[1]
+        table = DB_EDGES[edge_map]
+        # sort the line split depending on the order of the columns in the database needed for the table
+        new_line = [line_split[columns.index(col)] for col in DB_COLUMNS[table]]
+        new_line = line_split[0] + "," + ','.join(new_line) + "\n"
+
+        all_edge_types[table].write(new_line)
 
     logger.debug("Finished processing edges")
     return all_edge_types
@@ -293,6 +339,7 @@ def add_calculated_edges(session: Session,
     metabo_set = get_labels(metabolites, 'metabolite')
     variant_set = get_labels(variants, 'variant')
     logger.debug("All cohort sets loaded successfully")
+    del phenotypes, proteins, metabolites, variants
 
     edges = open(edges_path, 'r')
     format_edges(session, edges, protein_set, pheno_set, metabo_set, variant_set)
