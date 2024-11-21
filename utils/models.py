@@ -145,120 +145,230 @@ class CohortReferencesVariant(Base):
 
 # Calculated effects of cohort observations
 class EffectsVariantProtein(Base):
-    __tablename__ = 'effects_variant_protein'
+    __tablename__ = 'edges_variant_protein'
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    gwas_p_unadjusted = Column(Float)
+    gwas_p_bonferroni = Column(Float)
+    gwas_e_unspecified = Column(Float)
 
 
 class EffectsVariantMetabolite(Base):
-    __tablename__ = 'effects_variant_metabolite'
+    __tablename__ = 'edges_variant_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    gwas_p_unadjusted = Column(Float)
+    gwas_p_bonferroni = Column(Float)
+    gwas_e_unspecified = Column(Float)
 
 
 class EffectsVariantPhenotype(Base):
-    __tablename__ = 'effects_variant_phenotype'
+    __tablename__ = 'edges_variant_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     variant_id = Column(String, ForeignKey('cohort_variant.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    gwas_p_unadjusted = Column(Float)
+    gwas_p_bonferroni = Column(Float)
+    gwas_e_odds_ratio = Column(Float)
+    gwas_e_unspecified = Column(Float)
 
 
 class EffectsProteinProtein(Base):
-    __tablename__ = 'effects_protein_protein'
+    __tablename__ = 'edges_protein_protein'
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id_1 = Column(String, ForeignKey('cohort_protein.cohort_id'))
     protein_id_2 = Column(String, ForeignKey('cohort_protein.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 class EffectsProteinMetabolite(Base):
-    __tablename__ = 'effects_protein_metabolite'
+    __tablename__ = 'edges_protein_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 class EffectsProteinPhenotype(Base):
-    __tablename__ = 'effects_protein_phenotype'
+    __tablename__ = 'edges_protein_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     protein_id = Column(String, ForeignKey('cohort_protein.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    ttest_p_unadjusted = Column(Float)
+    ttest_p_bonferroni = Column(Float)
+    ttest_p_bh = Column(Float)
+    ttest_p_by = Column(Float)
+    ttest_e_cohens_d = Column(Float)
+
+    anova_p_unadjusted = Column(Float)
+    anova_p_bonferroni = Column(Float)
+    anova_p_bh = Column(Float)
+    anova_p_by = Column(Float)
+    anova_e_partial_eta2 = Column(Float)
+
+    mwu_p_unadjusted = Column(Float)
+    mwu_p_bonferroni = Column(Float)
+    mwu_p_bh = Column(Float)
+    mwu_p_by = Column(Float)
+    mwu_e_pearson_r = Column(Float)
+
+    kruskal_p_unadjusted = Column(Float)
+    kruskal_p_bonferroni = Column(Float)
+    kruskal_p_bh = Column(Float)
+    kruskal_p_by = Column(Float)
+    kruskal_e_eta2 = Column(Float)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 class EffectsMetaboliteMetabolite(Base):
-    __tablename__ = 'effects_metabolite_metabolite'
+    __tablename__ = 'edges_metabolite_metabolite'
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id_1 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     metabolite_id_2 = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 class EffectsMetabolitePhenotype(Base):
-    __tablename__ = 'effects_metabolite_phenotype'
+    __tablename__ = 'edges_metabolite_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     metabolite_id = Column(String, ForeignKey('cohort_metabolite.cohort_id'))
     phenotype_id = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    ttest_p_unadjusted = Column(Float)
+    ttest_p_bonferroni = Column(Float)
+    ttest_p_bh = Column(Float)
+    ttest_p_by = Column(Float)
+    ttest_e_cohens_d = Column(Float)
+
+    anova_p_unadjusted = Column(Float)
+    anova_p_bonferroni = Column(Float)
+    anova_p_bh = Column(Float)
+    anova_p_by = Column(Float)
+    anova_e_partial_eta2 = Column(Float)
+
+    mwu_p_unadjusted = Column(Float)
+    mwu_p_bonferroni = Column(Float)
+    mwu_p_bh = Column(Float)
+    mwu_p_by = Column(Float)
+    mwu_e_pearson_r = Column(Float)
+
+    kruskal_p_unadjusted = Column(Float)
+    kruskal_p_bonferroni = Column(Float)
+    kruskal_p_bh = Column(Float)
+    kruskal_p_by = Column(Float)
+    kruskal_e_eta2 = Column(Float)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 class EffectsPhenotypePhenotype(Base):
-    __tablename__ = 'effects_phenotype_phenotype'
+    __tablename__ = 'edges_phenotype_phenotype'
     id = Column(Integer, primary_key=True, autoincrement=True)
     phenotype_id_1 = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
     phenotype_id_2 = Column(String, ForeignKey('cohort_phenotype.cohort_id'))
-    np_p_value = Column(JSON)
-    np_effect_size = Column(JSON)
-    np_test_statistic = Column(String)
-    p_value = Column(JSON)
-    effect_size = Column(JSON)
-    test_statistic = Column(String)
+
+    chi2_p_unadjusted = Column(Float)
+    chi2_p_bonferroni = Column(Float)
+    chi2_p_bh = Column(Float)
+    chi2_p_by = Column(Float)
+    chi2_e_cramers_v = Column(Float)
+    chi2_e_phi = Column(Float)
+
+    ttest_p_unadjusted = Column(Float)
+    ttest_p_bonferroni = Column(Float)
+    ttest_p_bh = Column(Float)
+    ttest_p_by = Column(Float)
+    ttest_e_cohens_d = Column(Float)
+
+    anova_p_unadjusted = Column(Float)
+    anova_p_bonferroni = Column(Float)
+    anova_p_bh = Column(Float)
+    anova_p_by = Column(Float)
+    anova_e_partial_eta2 = Column(Float)
+
+    mwu_p_unadjusted = Column(Float)
+    mwu_p_bonferroni = Column(Float)
+    mwu_p_bh = Column(Float)
+    mwu_p_by = Column(Float)
+    mwu_e_pearson_r = Column(Float)
+
+    kruskal_p_unadjusted = Column(Float)
+    kruskal_p_bonferroni = Column(Float)
+    kruskal_p_bh = Column(Float)
+    kruskal_p_by = Column(Float)
+    kruskal_e_eta2 = Column(Float)
+
+    pearson_p_unadjusted = Column(Float)
+    pearson_p_bonferroni = Column(Float)
+    pearson_p_bh = Column(Float)
+    pearson_p_by = Column(Float)
+    pearson_e_r2 = Column(Float)
+
+    spearman_p_unadjusted = Column(Float)
+    spearman_p_bonferroni = Column(Float)
+    spearman_p_bh = Column(Float)
+    spearman_p_by = Column(Float)
+    spearman_e_rho = Column(Float)
 
 
 # Associations between entities in the external knowledge graph
