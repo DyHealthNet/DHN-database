@@ -38,46 +38,25 @@ DB_EDGES = {
     ('phenotype', 'phenotype'): "edges_phenotype_phenotype",
 }
 
-# Define which columns we need for each test (order matters here!)
-ALL_TESTS = {
-             "pearson": ['pearson_p_unadjusted', 'pearson_p_bonferroni', 'pearson_p_benjamini_hb',
-                         'pearson_p_benjamini_yek', 'pearson_e_r2'],
-             "spearman": ['spearman_p_unadjusted', 'spearman_p_bonferroni', 'spearman_p_benjamini_hb',
-                          'spearman_p_benjamini_yek', 'spearman_e_rho'],
-             "ttest": ['ttest_p_unadjusted', 'ttest_p_bonferroni', 'ttest_p_benjamini_hb',
-                       'ttest_p_benjamini_yek', 'ttest_e_cohens_d'],
-             "anova": ['anova_p_unadjusted', 'anova_p_bonferroni', 'anova_p_benjamini_hb',
-                       'anova_p_benjamini_yek', 'anova_e_np2'],
-             "mwu": ['mwu_p_unadjusted', 'mwu_p_bonferroni', 'mwu_p_benjamini_hb', 'mwu_p_benjamini_yek',
-                     'mwu_e_r'],
-             "kruskal": ['kruskal_p_unadjusted', 'kruskal_p_bonferroni', 'kruskal_p_benjamini_hb',
-                         'kruskal_p_benjamini_yek', 'kruskal_e_eta2'],
-             "chi2": ['chi2_p_unadjusted', 'chi2_p_bonferroni', 'chi2_p_benjamini_hb', 'chi2_p_benjamini_yek',
-                      'chi2_e_cramers_v', 'chi2_e_phi'],
-             "gwas": ['gwas_p_unadjusted', 'gwas_p_bonferroni', 'gwas_e_unspecified']
-             }
-
 # Define the columns we need for each table so that we can order them later when we read the file
 DB_COLUMNS = {
-    "edges_variant_phenotype": ['label1', 'label2'] + ALL_TESTS['gwas'],
-    "edges_variant_metabolite": ['label1', 'label2'] + ALL_TESTS['gwas'],
-    "edges_variant_protein": ['label1', 'label2'] + ALL_TESTS['gwas'],
+    "edges_variant_phenotype": ['label1', 'label2'] + [c.name for c in EffectsVariantPhenotype.__table__.columns][3:],
+    "edges_variant_metabolite": ['label1', 'label2'] + [c.name for c in EffectsVariantMetabolite.__table__.columns][3:],
+    "edges_variant_protein": ['label1', 'label2'] + [c.name for c in EffectsVariantProtein.__table__.columns][3:],
 
-    "edges_protein_protein": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
-    "edges_protein_metabolite": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+    "edges_protein_protein": ['label1', 'label2'] + [c.name for c in EffectsProteinProtein.__table__.columns][3:],
+    "edges_protein_metabolite": ['label1', 'label2'] + [c.name for c in EffectsProteinMetabolite.__table__.columns][3:],
 
-    "edges_metabolite_metabolite": ['label1', 'label2'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+    "edges_metabolite_metabolite": ['label1', 'label2'] + [c.name for c in EffectsMetaboliteMetabolite.__table__.columns][3:],
 
-    "edges_protein_phenotype": ['label1', 'label2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] + ALL_TESTS['mwu'] +
-                                  ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+    "edges_protein_phenotype": ['label1', 'label2'] + [c.name for c in EffectsProteinPhenotype.__table__.columns][3:],
 
-    "edges_metabolite_phenotype": ['label1', 'label2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] + ALL_TESTS['mwu'] +
-                                     ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] + ALL_TESTS['spearman'],
+    "edges_metabolite_phenotype": ['label1', 'label2'] + [c.name for c in EffectsMetabolitePhenotype.__table__.columns][3:],
 
-    "edges_phenotype_phenotype": ['label1', 'label2'] + ALL_TESTS['chi2'] + ALL_TESTS['ttest'] + ALL_TESTS['anova'] +
-                                    ALL_TESTS['mwu'] + ALL_TESTS['kruskal'] + ALL_TESTS['pearson'] +
-                                    ALL_TESTS['spearman']
+    "edges_phenotype_phenotype": ['label1', 'label2'] + [c.name for c in EffectsPhenotypePhenotype.__table__.columns][3:],
 }
+
+test = EffectsProteinProtein.__table__.columns.keys()
 
 # this gives us information which data type comes first in the column order
 EDGE_ORDER = {'variant': 3, 'protein': 2, 'metabolite': 1, 'phenotype': 0}
