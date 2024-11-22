@@ -1,5 +1,8 @@
 import dotenv
 import os
+
+from sqlalchemy import URL
+
 from utils.logger import get_logger
 
 # final id prefix in db and on NeDRex
@@ -51,6 +54,16 @@ DB_PASSWORD = os.getenv('DATABASE_PASS')
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = os.getenv('DB_PORT')
 DB_NAME = os.getenv('DATABASE_NAME')
+
+url = url_object = URL.create(
+    "postgresql",
+    username=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT,
+    database=DB_NAME,
+)
+
 
 # Name of the cohort study
 OBSERVATIONS = os.getenv("OBSERVATION_SOURCE")

@@ -125,22 +125,6 @@ def load_extra(extra_paths: str, sep="\t") -> StringIO:
     return buffer
 
 
-def swap_labels(s, label1, label2):
-    index1 = s.find(label1)
-    index2 = s.find(label2)
-
-    if index1 == -1 or index2 == -1:
-        return s
-
-    before = s[:min(index1, index2)]
-    between = s[min(index1 + len(label1), index2 + len(label2)):max(index1, index2)]
-    after = s[max(index1 + len(label1), index2 + len(label2)):]
-
-    if index1 < index2:
-        return before + label2 + between + label1 + after
-    return before + label1 + between + label2 + after
-
-
 def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     """
     Retrieve the set of unique labels from the given file, based on the data type (e.g. protein, metabolite, phenotype)
@@ -292,6 +276,9 @@ def add_edges(session: Session, edges: dict) -> bool:
     :return: bool - True if the edges were added successfully, False otherwise
     """
     try:
+        logger.debug("Disabling triggers for all tables")
+        for edge_type in edges.keys():
+            session.execute(text(f"ALTER TABLE {edge_type} DISABLE TRIGGER ALL"))
         if DEBUG:
             # clear the tables
             for edge_type in DB_EDGES.values():
@@ -303,6 +290,11 @@ def add_edges(session: Session, edges: dict) -> bool:
             edge_count = count_rows(edge_file)
             if edge_count > 0:
                 logger.debug(f"Finished adding {edge_count} {edge_type} edges")
+
+        logger.debug("Enabling triggers for all tables")
+        for edge_type in edges.keys():
+            session.execute(text(f"ALTER TABLE {edge_type} ENABLE TRIGGER ALL"))
+
     except Exception as e:
         session.rollback()
         logger.error(f"A problem occurred while adding edges: {e}")
