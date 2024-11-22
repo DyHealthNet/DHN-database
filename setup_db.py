@@ -26,15 +26,6 @@ from analysis.analyse_db import main as db_stats
 
 logger = get_logger('main')
 
-url = url_object = URL.create(
-    "postgresql",
-    username=DB_USER,
-    password=DB_PASSWORD,
-    host=DB_HOST,
-    port=DB_PORT,
-    database=DB_NAME,
-)
-
 engine = create_engine(url)
 logger.info("Connected to the database")
 

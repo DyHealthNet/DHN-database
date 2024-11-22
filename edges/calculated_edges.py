@@ -6,7 +6,8 @@
 # 4. add the edges to the database
 import sys
 from io import StringIO
-
+import struct
+import io
 import pandas as pd
 
 from utils.models import *
