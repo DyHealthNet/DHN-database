@@ -1,3 +1,4 @@
+import os
 import timeit
 
 from sqlalchemy.orm import Session, declarative_base
@@ -10,6 +11,15 @@ from utils.logger import get_logger
 import pandas as pd
 
 logger = get_logger(__name__)
+
+
+def read_data(data_path):
+    file_name, ending = os.path.splitext(data_path)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
+    return pd.read_csv(data_path, sep=sep)
 
 
 def get_cols(node_type: str) -> tuple[str, str, str, str]:
@@ -41,7 +51,7 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
 
     logger.debug(f"Length of pheno id map: {len(pheno_id_map)}")
     # read the phenotype data
-    raw_phenotypes = pd.read_csv(phenotype_path, sep='\t')
+    raw_phenotypes = read_data(phenotype_path)
     raw_phenotypes[xrefs] = raw_phenotypes[xrefs].fillna('')
     # go through the raw phenotype data and add the phenotypes to the database
     phenotypes_to_add = []
@@ -85,7 +95,7 @@ def cohort_metabolite_data(session: Session, metabolite_path: str = None, obs_so
         for syn in x.synonyms:
             metabolite_map[syn] = x.hmdb_id
 
-    raw_metabolites = pd.read_csv(metabolite_path, sep='\t')
+    raw_metabolites = read_data(metabolite_path)
     raw_metabolites[xrefs] = raw_metabolites[xrefs].fillna('')
     metabolites_to_add = []
     references_to_add = []
@@ -120,7 +130,7 @@ def cohort_protein_data(session: Session, protein_path: str = None, obs_source: 
     protein_matches = session.query(Protein).filter(Protein.observation_source == obs_source).all()
     protein_map = {x.uniprot_id: x.display_name for x in protein_matches}
 
-    raw_proteins = pd.read_csv(protein_path, sep='\t')
+    raw_proteins = read_data(protein_path)
     raw_proteins[xrefs] = raw_proteins[xrefs].fillna('')
     proteins_to_add = []
     references_to_add = []
@@ -151,7 +161,7 @@ def cohort_variant_data(session: Session, variants_meta_path: str, obs_source: s
     """
     Retrieves the variant data from the file
     """
-    variants_meta_df = pd.read_csv(variants_meta_path, sep='\t', dtype=str)
+    variants_meta_df = read_data(variants_meta_path, dtype=str)
     unique_id, dp_name, desc, xrefs = get_cols('variant')
     start = timeit.default_timer()
 

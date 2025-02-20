@@ -62,7 +62,7 @@ test = EffectsProteinProtein.__table__.columns.keys()
 EDGE_ORDER = {'variant': 3, 'protein': 2, 'metabolite': 1, 'phenotype': 0}
 
 
-def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
+def load_files(file_path: str) -> pd.DataFrame | None:
     """
     Load the file from the given path as a pandas DataFrame
     :param file_path: str - path to the file
@@ -71,6 +71,11 @@ def load_files(file_path: str, sep="\t") -> pd.DataFrame | None:
     """
     if not file_path:
         return None
+    file_name, ending = os.path.splitext(file_path)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
     return pd.read_csv(file_path, sep=sep)
 
 
@@ -116,13 +121,14 @@ def get_labels(label_file: pd.DataFrame, label_type: str = None) -> set[str]:
     if not isinstance(label_file, pd.DataFrame):
         return set()
     id_col = COHORT_COLUMNS[label_type]['unique_id']
+    logger.debug("ID column for " + label_type + ": " + id_col)
     # check that the label and id cols exist
     assert id_col in label_file.columns, f"ID column {id_col} not found in the file"
     return set(label_file[id_col].to_list())
 
 
 def map_edge(edge: tuple, protein_set: set, pheno_set: set, metabo_set: set, variant_set: set) \
-        -> tuple[str, str, bool] | None:
+        -> tuple[str, str, bool] | tuple[None, None, None]:
     """
     Map the source and target of an edge to the appropriate data type given an id and the cohort sets
     :param variant_set: set of unique variant IDs from the cohort data
@@ -152,7 +158,8 @@ def map_edge(edge: tuple, protein_set: set, pheno_set: set, metabo_set: set, var
             break
 
     if not source_type or not target_type:
-        return None
+        logger.warning(f"Edge {edge} could not be mapped")
+        return None, None, None
 
     swap = False
     if EDGE_ORDER[source_type] < EDGE_ORDER[target_type]:

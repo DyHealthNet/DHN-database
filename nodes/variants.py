@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 
 from utils.query_nedrex import get_edge_associations
@@ -13,7 +15,13 @@ def read_rsid_chris(variant_data_path: str) -> set[tuple[str, str]]:
     """
     reads variant IDs from CHRIS dataset
     """
-    df = pd.read_csv(variant_data_path, sep='\t')
+    file_name, ending = os.path.splitext(variant_data_path)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
+    df = pd.read_csv(variant_data_path, sep=sep)
+
     logger.debug(f"Number of nans in variant col: {df['rsid'].isna().sum()}")
     df['rsid'] = df['rsid'].fillna('')
     return set(zip(df['rsid'], df['alt']))

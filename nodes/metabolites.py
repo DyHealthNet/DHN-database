@@ -20,7 +20,12 @@ def read_metabolite_mapping(mapping_file) -> pd.DataFrame:
     """
     Read the metabolite mapping file and return a dataframe
     """
-    return pd.read_csv(mapping_file, sep='\t')
+    file_name, ending = os.path.splitext(mapping_file)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
+    return pd.read_csv(mapping_file, sep=sep)
 
 
 def backcoupled_metabolites_disease(elem, omim_ids):

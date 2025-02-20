@@ -451,8 +451,8 @@ if __name__ == '__main__':
     add_layer_node(add_phenotypes, "disorders", add_disorder_data, session=db_session,
                    file_path=PHENO_PATH, obs_source=OBSERVATIONS)
 
-    # add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
-    #                file_path=PHENO_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
+    add_layer_node(add_phenotypes, "phenotypes", add_phenotype_data, session=db_session,
+                   file_path=PHENO_PATH, obs_source=OBSERVATIONS, data_dir=DATA_DIR)
 
     add_layer_node(add_proteins, "proteins", add_protein_data, session=db_session,
                    file_path=PROTEIN_PATH, obs_source=OBSERVATIONS)

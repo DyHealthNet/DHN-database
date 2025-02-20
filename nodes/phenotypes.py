@@ -64,13 +64,19 @@ def read_hpo_ontology(hpo_path: str) -> dict:
         hpo = json.load(f)
     return hpo
 
+
 def get_needed_pheno_ids(phenotype_path: str) -> set[str]:
     """
     Extracts phenotype reference ids from a phenotype file
     :param phenotype_path: path to phenotype file
     :return: dataframe with phenotype data
     """
-    df = pd.read_csv(phenotype_path, sep='\t')
+    file_name, ending = os.path.splitext(phenotype_path)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
+    df = pd.read_csv(phenotype_path, sep=sep)
     unique_pheno = df[COHORT_COLUMNS['phenotype']['xref']].unique()
     pheno_ids = [pheno for sublist in [str(pheno).split(';') for pheno in unique_pheno] for pheno in sublist]
     logger.debug(f"Found {len(df)} phenotypes with {len(pheno_ids)} unique phenotype ids")

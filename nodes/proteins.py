@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 from utils.query_nedrex import get_edge_associations, get_gene_data
 from nedrex.core import iter_nodes
@@ -38,7 +40,12 @@ def read_protein_id_chris(protein_id_path: str):
     """
     reads Protein IDs from Chris dataset
     """
-    df = pd.read_csv(protein_id_path, sep='\t')
+    file_name, ending = os.path.splitext(protein_id_path)
+    if ending not in ['.csv', '.tsv']:
+        raise ValueError(f"Unsupported file format for phenotypes meta file: {ending}. "
+                         f"Only CSV and TSV files are supported.")
+    sep = "," if ending == ".csv" else "\t"
+    df = pd.read_csv(protein_id_path, sep=sep)
     # check how many nans in the uniprot ocl
     logger.debug(f"Number of nans in UniProt col: {df['UniProt'].isna().sum()}")
     df['UniProt'] = df['UniProt'].fillna('')
