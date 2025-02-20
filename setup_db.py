@@ -35,15 +35,32 @@ def create_tables():
     Base.metadata.create_all(engine)
 
 
-def delete_tables(session: Session):
+def delete_tables():
     logger.warning("Removing all tables from the database.")
-    # sql alchemy doesn't support dropping views, so we have to use raw sql
-    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_description_fts;"))
-    session.execute(text("DROP VIEW IF EXISTS view_references_edges;"))
-    session.execute(text("DROP VIEW IF EXISTS view_external_nodes;"))
-    session.execute(text("DROP MATERIALIZED VIEW IF EXISTS view_associations_edges;"))
-    session.commit()
-    Base.metadata.drop_all(engine, checkfirst=True)
+    with engine.connect() as conn:
+        # Disable foreign key checks
+        conn.execute(text("SET session_replication_role = 'replica';"))
+        conn.commit()
+
+        # Get all table names excluding the ones we want to keep
+        result = conn.execute(text("""
+            SELECT tablename 
+            FROM pg_tables 
+            WHERE schemaname = 'public' 
+            AND tablename NOT LIKE 'auth_%'
+            AND tablename NOT LIKE 'account_%'
+            AND tablename NOT LIKE 'django_%'
+            AND tablename NOT LIKE 'socialaccount_%';
+        """))
+        tables = [row[0] for row in result]
+
+        # Drop tables
+        for table in tables:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
+
+        # Re-enable foreign key checks
+        conn.execute(text("SET session_replication_role = 'origin';"))
+        conn.commit()
 
 
 def add_items(session: Session, items: iter, column: type[DeclarativeBase], filter_args: list, bulk: bool = False):
@@ -132,6 +149,7 @@ def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[
     if len(curr_missing_ids) > 0 and missing_ids is None:
         logger.info(f"Adding phenotype...")
         add_phenotype_data(db_session, file_path=None, data_dir=DATA_DIR, missing_ids=curr_missing_ids, obs_source=OBSERVATIONS)
+
 
 def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = '../data', missing_ids: list = None,
                        obs_source: str = None):
@@ -418,7 +436,7 @@ if __name__ == '__main__':
     db_session = Session()
 
     # delete all tables and recreate them
-    delete_tables(db_session)
+    delete_tables()
     create_tables()
 
     if not all([EDGES_PATH, DATA_DIR]):
