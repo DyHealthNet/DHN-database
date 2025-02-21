@@ -1,4 +1,4 @@
-# DHN-database
+# DyHealthNet Database Repository
 
 This repository handles the creation of all node types as well as edges between the nodes.
 Most data is dynamically pulled from the NeDRex API and subsequently inserted into the database.
