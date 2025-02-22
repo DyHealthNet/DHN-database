@@ -58,6 +58,10 @@ def delete_tables():
         for table in tables:
             conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
 
+        # remove django migrations for app "network"
+        conn.execute(text("DELETE FROM django_migrations WHERE app='network';"))
+        conn.commit()
+
         # Re-enable foreign key checks
         conn.execute(text("SET session_replication_role = 'origin';"))
         conn.commit()
