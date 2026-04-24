@@ -5,8 +5,8 @@ from nedrex.core import api_keys_active, get_api_key
 from utils.settings import DEBUG, ID_PREFIX
 from nedrex.core import iter_nodes, iter_edges
 
-# nedrex.config.set_url_base("https://api.nedrex.net/licensed/")
-nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
+nedrex.config.set_url_base("https://api.nedrex.net/licensed")
+# nedrex.config.set_url_base("https://apps.cosy.bio/licensed")
 if api_keys_active():
     api_key = get_api_key(accept_eula=True)
     nedrex.config.set_api_key(api_key)

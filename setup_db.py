@@ -59,7 +59,12 @@ def delete_tables():
             conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
 
         # remove django migrations for app "network"
-        conn.execute(text("DELETE FROM django_migrations WHERE app='network';"))
+        result = conn.execute(text("""
+            SELECT to_regclass('public.django_migrations');
+        """)).scalar()
+
+        if result:
+            conn.execute(text("DELETE FROM django_migrations WHERE app='network';"))
         conn.commit()
 
         # Re-enable foreign key checks
