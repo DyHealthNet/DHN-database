@@ -52,22 +52,30 @@ def cohort_phenotype_data(session: Session, phenotype_path: str = None, obs_sour
     logger.debug(f"Length of pheno id map: {len(pheno_id_map)}")
     # read the phenotype data
     raw_phenotypes = read_data(phenotype_path)
-    raw_phenotypes[xrefs] = raw_phenotypes[xrefs].fillna('')
+    has_xrefs = bool(xrefs) and xrefs in raw_phenotypes.columns
+    if has_xrefs:
+        raw_phenotypes[xrefs] = raw_phenotypes[xrefs].fillna('')
     # go through the raw phenotype data and add the phenotypes to the database
     phenotypes_to_add = []
     disorder_references_to_add = []
     phenotype_references_to_add = []
     missing = set()
     for index, row in raw_phenotypes.iterrows():
-        display_name = row[dp_name] if row[dp_name] and isinstance(row[dp_name], str) else row[COHORT_COLUMNS['phenotype']['unique_id']]   # TODO change 'label' to settings value
+        display_name = row[dp_name] if dp_name and row[dp_name] and isinstance(row[dp_name], str) else row[COHORT_COLUMNS['phenotype']['unique_id']]   # TODO change 'label' to settings value
+        xref_value = row[xrefs] if has_xrefs else ''
         new_phenotype = CohortPhenotype(cohort_id=row[u_id], display_name=display_name,
                                         description=row[desc],
-                                        xrefs="|".join([f"{ID_PREFIX}.{x}" for x in row[xrefs].split(';')]))
+                                        xrefs="|".join([f"{ID_PREFIX}.{x}" for x in str(xref_value).split(';') if x]))
         phenotypes_to_add.append(new_phenotype)
 
+        if not has_xrefs:
+            continue
+
         mondo_id = hpo_id = None
-        for pheno_id in row[xrefs].split(";"):
+        for pheno_id in str(row[xrefs]).split(";"):
             pheno_id = pheno_id.strip()
+            if not pheno_id:
+                continue
             if pheno_id in pheno_id_map:
                 for id in pheno_id_map[pheno_id]:
                     # add the references to the knowledge graph for the phenotypes
@@ -96,17 +104,23 @@ def cohort_metabolite_data(session: Session, metabolite_path: str = None, obs_so
             metabolite_map[syn] = x.hmdb_id
 
     raw_metabolites = read_data(metabolite_path)
-    raw_metabolites[xrefs] = raw_metabolites[xrefs].fillna('')
+    has_xrefs = bool(xrefs) and xrefs in raw_metabolites.columns
+    if has_xrefs:
+        raw_metabolites[xrefs] = raw_metabolites[xrefs].fillna('')
     metabolites_to_add = []
     references_to_add = []
     missing = set()
     for index, row in raw_metabolites.iterrows():
+        xref_value = row[xrefs] if has_xrefs else ''
         new_metabolite = CohortMetabolite(cohort_id=row[u_id],
                                           display_name=row[dp_name],
                                           description=row[desc],
-                                          xrefs="|".join([f"hmdb.{x}" for x in row[xrefs].split(';')]))
+                                          xrefs="|".join([f"hmdb.{x}" for x in str(xref_value).split(';') if x]))
 
         metabolites_to_add.append(new_metabolite)
+
+        if not has_xrefs:
+            continue
 
         # add the references to the knowledge graph for the metabolites
         for hmdb_id in row[xrefs].split(';'):
@@ -131,17 +145,23 @@ def cohort_protein_data(session: Session, protein_path: str = None, obs_source: 
     protein_map = {x.uniprot_id: x.display_name for x in protein_matches}
 
     raw_proteins = read_data(protein_path)
-    raw_proteins[xrefs] = raw_proteins[xrefs].fillna('')
+    has_xrefs = bool(xrefs) and xrefs in raw_proteins.columns
+    if has_xrefs:
+        raw_proteins[xrefs] = raw_proteins[xrefs].fillna('')
     proteins_to_add = []
     references_to_add = []
     missing = set()
     for index, row in raw_proteins.iterrows():
-        display_name = ", ".join([protein_map.get(f"uniprot.{x}", x) for x in row[dp_name].split('|')])
+        display_name = ", ".join([protein_map.get(f"uniprot.{x}", x) for x in row[dp_name].split('|')]) if dp_name else row[u_id]
+        xref_value = row[xrefs] if has_xrefs else ''
         new_protein = CohortProtein(cohort_id=row[u_id],
                                     display_name=display_name,
                                     description=row[desc],
-                                    xrefs="|".join([f"uniprot.{x}" for x in row[xrefs].split('|')]))
+                                    xrefs="|".join([f"uniprot.{x}" for x in str(xref_value).split('|') if x]))
         proteins_to_add.append(new_protein)
+
+        if not has_xrefs:
+            continue
 
         # add the references to the knowledge graph for the proteins
         for uniprot_id in row[xrefs].split('|'):

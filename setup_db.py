@@ -116,6 +116,9 @@ def add_disorder_data(session: Session, file_path: str = None, missing_ids: set[
     :return: None
     """
     if missing_ids is None:
+        if COHORT_COLUMNS['phenotype']['xref'] is None:
+            logger.error("The reference column for the disorder data is not provided. External references cannot be added.")#
+            return
         needed_pheno_ids_no_prefix = get_needed_pheno_ids(file_path)
         needed_pheno_ids = {f"{ID_PREFIX}.{x}" for x in needed_pheno_ids_no_prefix}
         data = get_disorder_data(needed_pheno_ids)
@@ -188,6 +191,9 @@ def add_phenotype_data(session: Session, file_path: str = None, data_dir: str = 
     if not file_path:
         needed_ids = missing_ids
     else:
+        if COHORT_COLUMNS['phenotype']['xref'] is None:
+            logger.info("The reference column for the phenotype data is not provided. External references cannot be added.")
+            return
         needed_ids = get_needed_pheno_ids(file_path)
 
     available_pheno_ids = pheno_ids_from_hpo(hpo_graph, needed_ids)
@@ -272,6 +278,9 @@ def add_cohort_variants(session: Session, variant_meta_path: str = None, obs_sou
 
 def add_protein_data(session: Session, file_path: str = None, obs_source: str = None, missing_ids: set = None):
     if missing_ids is None:
+        if COHORT_COLUMNS['protein']['xref'] is None:
+            logger.info("The reference column for the protein data is not provided. External references cannot be added.")
+            return
         protein_ids = read_protein_id_chris(file_path)
     else:
         protein_ids = missing_ids
@@ -300,6 +309,9 @@ def add_protein_data(session: Session, file_path: str = None, obs_source: str = 
 
 
 def add_metabolite_data(session: Session, file_path: str = None, data_dir: str = '../data', obs_source: str = None):
+    if COHORT_COLUMNS['metabolite']['xref'] is None:
+        logger.info("The reference column for the metabolite data is not provided. External references cannot be added.")
+        return
     hmdb_data_path = f'{data_dir}/hmdb_metabolites.xml'
     download_metabolite_data(data_dir)
     metabolite_mapping = read_metabolite_mapping(file_path)
@@ -367,6 +379,9 @@ def add_metabolite_data(session: Session, file_path: str = None, data_dir: str =
 
 
 def add_genomic_variant_data(session: Session, file_path: str = None, obs_source: str = None):
+    if COHORT_COLUMNS['variant']['xref'] is None:
+        logger.info("The reference column for the variant data is not provided. External references cannot be added.")
+        return
     rs_id_list = read_rsid_chris(file_path)
     variants_to_add = get_genomic_variant_nodes(rs_id_list, obs_source)
     add_items(session, variants_to_add, GenomicVariant, filter_args=['clinvar_id'])
@@ -451,7 +466,7 @@ if __name__ == '__main__':
         logger.error("Please provide valid paths to the data files.")
         sys.exit(1)
 
-    if ID_PREFIX is None:
+    if COHORT_COLUMNS['phenotype']['xref'] is None and ID_PREFIX is None:
         logger.error("Please provide a valid database name that matches the IDs in your phenotype meta file")
         sys.exit(1)
 
