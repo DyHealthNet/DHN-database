@@ -423,3 +423,25 @@ class MetaboliteAssocDisorder(Base):
     hmdb_id = Column(String, ForeignKey('metabolite.hmdb_id'))
     mondo_id = Column(String, ForeignKey('disorder.mondo_id'))
     edge_source = Column(String)
+
+
+### Flat tables (experimental: single nodes table + single edges table) ###
+
+class NodeFlat(Base):
+    __tablename__ = 'nodes_flat'
+    node_id = Column(String, primary_key=True)
+    display_name = Column(String)
+    data_type = Column(String)
+    node_group = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    xrefs = Column(String, nullable=True)
+
+
+class EdgeFlat(Base):
+    __tablename__ = 'edges_flat'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    node_id_1 = Column(String, ForeignKey('nodes_flat.node_id'))
+    node_id_2 = Column(String, ForeignKey('nodes_flat.node_id'))
+    p_value = Column(Float)
+    effect_size = Column(Float, nullable=True)
+    test_type = Column(String)

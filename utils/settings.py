@@ -74,6 +74,19 @@ PROTEIN_PATH = os.getenv("PROTEIN_META_PATH")
 METABOLITE_PATH = os.getenv("METABOLITE_META_PATH")
 EDGES_PATH = os.getenv("CALCULATED_EDGES_PATH")
 DATA_DIR = os.getenv("DATA_DIR")
+NODES_PATH = os.getenv("NODES_PATH")
+NODES_META_PATH = os.getenv("NODES_META_PATH")
+
+# Columns for the combined nodes file (flat table structure).
+# unique_id and data_type are required, display_name/description/xref/group are optional.
+NODES_COLUMNS = {
+    'unique_id': os.getenv("NODES_LABEL_COLUMN"),
+    'data_type': os.getenv("NODES_TYPE_COLUMN"),
+    'display_name': os.getenv("NODES_DP_NAME_COLUMN"),
+    'description': os.getenv("NODES_DESCRIPTION_COLUMN"),
+    'xref': os.getenv("NODES_XREF_COLUMN"),
+    'group': os.getenv("NODES_GROUP_COLUMN"),
+}
 EXTRA_EDGES = os.getenv("EXTRA_EDGES")
 VARIANT_META_PATH = os.getenv("VARIANT_META_PATH")
 
@@ -111,7 +124,7 @@ COHORT_COLUMNS = {
 }
 
 # Other settings
-CHUNK_SIZE = os.getenv("CHUNK_SIZE") if os.getenv("CHUNK_SIZE") else 10_000_000
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE")) if os.getenv("CHUNK_SIZE") else 10_000_000
 VISUALIZE = True if os.getenv("VISUALIZE").lower() == "true" else False
 
 
