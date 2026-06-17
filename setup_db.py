@@ -466,7 +466,7 @@ if __name__ == '__main__':
         logger.error("Please provide valid paths to the data files.")
         sys.exit(1)
 
-    if COHORT_COLUMNS['phenotype']['xref'] is None and ID_PREFIX is None:
+    if COHORT_COLUMNS['phenotype']['xref'] is not None and ID_PREFIX is None:
         logger.error("Please provide a valid database name that matches the IDs in your phenotype meta file")
         sys.exit(1)
 
