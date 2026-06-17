@@ -425,10 +425,10 @@ class MetaboliteAssocDisorder(Base):
     edge_source = Column(String)
 
 
-### Flat tables (experimental: single nodes table + single edges table) ###
+### New-style tables: single nodes table + parametric/nonparametric edge tables ###
 
-class NodeFlat(Base):
-    __tablename__ = 'nodes_flat'
+class Node(Base):
+    __tablename__ = 'nodes'
     node_id = Column(String, primary_key=True)
     display_name = Column(String)
     data_type = Column(String)
@@ -437,11 +437,21 @@ class NodeFlat(Base):
     xrefs = Column(String, nullable=True)
 
 
-class EdgeFlat(Base):
-    __tablename__ = 'edges_flat'
+class EdgeParametric(Base):
+    __tablename__ = 'edges_parametric'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    node_id_1 = Column(String, ForeignKey('nodes_flat.node_id'))
-    node_id_2 = Column(String, ForeignKey('nodes_flat.node_id'))
+    node_id_1 = Column(String, ForeignKey('nodes.node_id'))
+    node_id_2 = Column(String, ForeignKey('nodes.node_id'))
+    p_value = Column(Float)
+    effect_size = Column(Float, nullable=True)
+    test_type = Column(String)
+
+
+class EdgeNonparametric(Base):
+    __tablename__ = 'edges_nonparametric'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    node_id_1 = Column(String, ForeignKey('nodes.node_id'))
+    node_id_2 = Column(String, ForeignKey('nodes.node_id'))
     p_value = Column(Float)
     effect_size = Column(Float, nullable=True)
     test_type = Column(String)

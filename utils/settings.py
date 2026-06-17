@@ -76,6 +76,8 @@ EDGES_PATH = os.getenv("CALCULATED_EDGES_PATH")
 DATA_DIR = os.getenv("DATA_DIR")
 NODES_PATH = os.getenv("NODES_PATH")
 NODES_META_PATH = os.getenv("NODES_META_PATH")
+PARAMETRIC_EDGES_PATH = os.getenv("PARAMETRIC_EDGES_PATH") or None
+NONPARAMETRIC_EDGES_PATH = os.getenv("NONPARAMETRIC_EDGES_PATH") or None
 
 # Columns for the combined nodes file (flat table structure).
 # unique_id and data_type are required, display_name/description/xref/group are optional.

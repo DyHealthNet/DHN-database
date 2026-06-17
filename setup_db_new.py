@@ -1,15 +1,20 @@
 """
-Populate the flat table structure:
-  - nodes_flat      : all nodes regardless of biological type, read from a single file
-                      (includes data_type and an optional grouping column)
-  - edges_flat      : association scores from the scores CSV
+Populate the new database structure:
+  - nodes               : all nodes regardless of biological type, read from a single file
+                          (includes data_type and an optional grouping column)
+  - edges_parametric    : association scores from a parametric test run
+  - edges_nonparametric : association scores from a nonparametric test run
+
+At least one of PARAMETRIC_EDGES_PATH / NONPARAMETRIC_EDGES_PATH must be set; if both
+are set, both tables are populated independently. Queries always use one table or the
+other — they are never mixed.
 
 Nodes file columns are configured via NODES_LABEL_COLUMN / NODES_TYPE_COLUMN
 (required) and NODES_DP_NAME_COLUMN / NODES_DESCRIPTION_COLUMN / NODES_XREF_COLUMN /
 NODES_GROUP_COLUMN (optional) in the environment, see utils.settings.NODES_COLUMNS.
 
 Expected scores CSV format (produced by the association-score package):
-    index, label1, label2, p_value, effect_size, test_type
+    index, label1, label2, raw-P, raw-E, test_type
 
 CSV/TSV inputs are cached as parquet files alongside the source file for faster
 repeated reads (mirrors DHN-backend's startup_utils.check_files_and_return). The
@@ -17,7 +22,7 @@ scores file is streamed from the parquet cache in chunks of CHUNK_SIZE rows, so
 arbitrarily large files can be inserted without loading them fully into memory.
 
 Run directly:
-    python edges/flat_tables.py
+    python setup_db_new.py
 """
 import os
 import time
@@ -28,13 +33,16 @@ from io import StringIO
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
-from utils.models import Base, NodeFlat, EdgeFlat
-from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, EDGES_PATH, NODES_META_PATH,
+from utils.models import Base, Node, EdgeParametric, EdgeNonparametric
+from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME,
+                            PARAMETRIC_EDGES_PATH, NONPARAMETRIC_EDGES_PATH, NODES_META_PATH,
                             NODES_COLUMNS, CHUNK_SIZE, get_logger)
 
 logger = get_logger(__name__)
 
 SCORES_COLUMNS = ['label1', 'label2', 'raw-P', 'raw-E', 'test_type']
+
+_VALID_EDGE_TABLES = {'edges_parametric', 'edges_nonparametric'}
 
 
 def _ensure_parquet_cache(path: str) -> str:
@@ -95,20 +103,20 @@ def _copy_dataframe(session: Session, df: pd.DataFrame, table: str, columns: lis
     raw_conn.commit()
 
 
-def create_flat_tables(engine) -> None:
-    """Create nodes_flat and edges_flat if they do not exist."""
+def create_tables(engine) -> None:
+    """Create nodes, edges_parametric, and edges_nonparametric if they do not exist."""
     Base.metadata.create_all(
         engine,
-        tables=[NodeFlat.__table__, EdgeFlat.__table__],
+        tables=[Node.__table__, EdgeParametric.__table__, EdgeNonparametric.__table__],
         checkfirst=True,
     )
-    logger.info("Flat tables created (or already existed)")
+    logger.info("Tables created (or already existed)")
 
 
-def populate_nodes_flat(session: Session, nodes_path: str) -> None:
+def populate_nodes(session: Session, nodes_path: str) -> None:
     """
-    Read the combined nodes file and insert every node into nodes_flat.
-    Nodes already present in nodes_flat are skipped.
+    Read the combined nodes file and insert every node into nodes.
+    Nodes already present are skipped.
 
     Required columns (NODES_LABEL_COLUMN, NODES_TYPE_COLUMN): unique node id, data type.
     Optional columns (NODES_DP_NAME_COLUMN, NODES_DESCRIPTION_COLUMN, NODES_XREF_COLUMN,
@@ -143,42 +151,47 @@ def populate_nodes_flat(session: Session, nodes_path: str) -> None:
         'xrefs': df[xref_col] if xref_col and xref_col in df.columns else None,
     })
 
-    existing_ids = {row[0] for row in session.query(NodeFlat.node_id).all()}
+    existing_ids = {row[0] for row in session.query(Node.node_id).all()}
     nodes = nodes[~nodes['node_id'].isin(existing_ids)]
 
     if nodes.empty:
-        logger.info(f"No new nodes to insert into nodes_flat ({time.perf_counter() - start:.2f}s)")
+        logger.info(f"No new nodes to insert ({time.perf_counter() - start:.2f}s)")
         return
 
-    _copy_dataframe(session, nodes, 'nodes_flat',
+    _copy_dataframe(session, nodes, 'nodes',
                     ['node_id', 'display_name', 'data_type', 'node_group', 'description', 'xrefs'])
-    logger.info(f"Inserted {len(nodes)} nodes into nodes_flat in {time.perf_counter() - start:.2f}s")
+    logger.info(f"Inserted {len(nodes)} nodes in {time.perf_counter() - start:.2f}s")
 
 
-def insert_scores_flat(session: Session, edges_path: str, truncate: bool = False,
-                        chunk_size: int = CHUNK_SIZE) -> None:
+def insert_scores(session: Session, edges_path: str, table: str,
+                  truncate: bool = False, chunk_size: int = CHUNK_SIZE) -> None:
     """
-    Read a scores file and insert into edges_flat, processing it in chunks of
-    chunk_size rows so arbitrarily large files don't need to fit in memory.
+    Read a scores file and insert into the given edge table (edges_parametric or
+    edges_nonparametric), processing it in chunks so arbitrarily large files don't
+    need to fit in memory.
 
-    Expected columns: label1, label2, p_value, effect_size, test_type.
-    Rows missing p_value or whose node IDs are not present in nodes_flat are skipped.
+    Expected columns: label1, label2, raw-P, raw-E, test_type.
+    Rows missing raw-P or whose node IDs are not present in nodes are skipped.
 
     :param session:     SQLAlchemy session connected to the target database.
     :param edges_path:  Path to the scores CSV/TSV/Parquet file.
-    :param truncate:    If True, clear edges_flat before inserting.
+    :param table:       Target table name ('edges_parametric' or 'edges_nonparametric').
+    :param truncate:    If True, clear the target table before inserting.
     :param chunk_size:  Number of rows to read and insert per batch.
     """
+    if table not in _VALID_EDGE_TABLES:
+        raise ValueError(f"Invalid edge table '{table}'. Must be one of: {_VALID_EDGE_TABLES}")
+
     start = time.perf_counter()
-    logger.info(f"Loading scores from {edges_path} in chunks of {chunk_size:,} rows")
+    logger.info(f"Loading scores from {edges_path} into {table} in chunks of {chunk_size:,} rows")
 
     if truncate:
-        session.execute(text("TRUNCATE TABLE edges_flat"))
+        session.execute(text(f"TRUNCATE TABLE {table}"))
         session.commit()
-        logger.info("Truncated edges_flat")
+        logger.info(f"Truncated {table}")
 
-    # FK safety: only insert edges whose both node IDs exist in nodes_flat
-    known_nodes = {row[0] for row in session.query(NodeFlat.node_id).all()}
+    # FK safety: only insert edges whose both node IDs exist in nodes
+    known_nodes = {row[0] for row in session.query(Node.node_id).all()}
 
     total_inserted = 0
     total_skipped = 0
@@ -200,19 +213,25 @@ def insert_scores_flat(session: Session, edges_path: str, truncate: bool = False
 
         df = df.rename(columns={'label1': 'node_id_1', 'label2': 'node_id_2', 'raw-P': 'p_value', 'raw-E': 'effect_size'})
 
-        _copy_dataframe(session, df, 'edges_flat', ['node_id_1', 'node_id_2', 'p_value', 'effect_size', 'test_type'])
+        _copy_dataframe(session, df, table, ['node_id_1', 'node_id_2', 'p_value', 'effect_size', 'test_type'])
         total_inserted += len(df)
 
     elapsed = time.perf_counter() - start
     if total_skipped:
-        logger.warning(f"Skipped {total_skipped} edges with node IDs not in nodes_flat")
+        logger.warning(f"Skipped {total_skipped} edges with node IDs not in nodes")
     if total_inserted:
-        logger.info(f"Inserted {total_inserted} rows into edges_flat in {elapsed:.2f}s")
+        logger.info(f"Inserted {total_inserted} rows into {table} in {elapsed:.2f}s")
     else:
-        logger.warning(f"No valid edges to insert into edges_flat ({elapsed:.2f}s)")
+        logger.warning(f"No valid edges to insert into {table} ({elapsed:.2f}s)")
 
 
 if __name__ == '__main__':
+    if not PARAMETRIC_EDGES_PATH and not NONPARAMETRIC_EDGES_PATH:
+        raise EnvironmentError(
+            "At least one of PARAMETRIC_EDGES_PATH or NONPARAMETRIC_EDGES_PATH must be set. "
+            "The platform cannot run without any edges."
+        )
+
     url_obj = URL.create(
         "postgresql",
         username=DB_USER,
@@ -226,9 +245,18 @@ if __name__ == '__main__':
     db_session = SessionFactory()
 
     total_start = time.perf_counter()
-    create_flat_tables(engine)
-    populate_nodes_flat(db_session, NODES_META_PATH)
-    insert_scores_flat(db_session, EDGES_PATH)
+    create_tables(engine)
+    populate_nodes(db_session, NODES_META_PATH)
+
+    if PARAMETRIC_EDGES_PATH:
+        insert_scores(db_session, PARAMETRIC_EDGES_PATH, table='edges_parametric')
+    else:
+        logger.info("PARAMETRIC_EDGES_PATH not set, skipping edges_parametric")
+
+    if NONPARAMETRIC_EDGES_PATH:
+        insert_scores(db_session, NONPARAMETRIC_EDGES_PATH, table='edges_nonparametric')
+    else:
+        logger.info("NONPARAMETRIC_EDGES_PATH not set, skipping edges_nonparametric")
 
     db_session.close()
-    logger.info(f"Flat table population complete in {time.perf_counter() - total_start:.2f}s.")
+    logger.info(f"Database population complete in {time.perf_counter() - total_start:.2f}s.")
