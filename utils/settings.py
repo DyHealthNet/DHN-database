@@ -45,7 +45,7 @@ logger = get_logger(__name__)
 dotenv.load_dotenv()
 
 # Debug settings
-DEBUG = True if os.getenv("DEBUG").lower() == "true" else False
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 
 # Database settings
@@ -74,21 +74,27 @@ PROTEIN_PATH = os.getenv("PROTEIN_META_PATH")
 METABOLITE_PATH = os.getenv("METABOLITE_META_PATH")
 EDGES_PATH = os.getenv("CALCULATED_EDGES_PATH")
 DATA_DIR = os.getenv("DATA_DIR")
-NODES_PATH = os.getenv("NODES_PATH")
-NODES_META_PATH = os.getenv("NODES_META_PATH")
 PARAMETRIC_EDGES_PATH = os.getenv("PARAMETRIC_EDGES_PATH") or None
 NONPARAMETRIC_EDGES_PATH = os.getenv("NONPARAMETRIC_EDGES_PATH") or None
 
-# Columns for the combined nodes file (flat table structure).
-# unique_id and data_type are required, display_name/description/xref/group are optional.
-NODES_COLUMNS = {
-    'unique_id': os.getenv("NODES_LABEL_COLUMN"),
-    'data_type': os.getenv("NODES_TYPE_COLUMN"),
-    'display_name': os.getenv("NODES_DP_NAME_COLUMN"),
-    'description': os.getenv("NODES_DESCRIPTION_COLUMN"),
-    'xref': os.getenv("NODES_XREF_COLUMN"),
-    'group': os.getenv("NODES_GROUP_COLUMN"),
-}
+# Node sources, mirroring the backend's network.utils.data_manager.combine_data(): one
+# entry per data source (e.g. phenotypes, proteins, metabolites), contributing label/type
+# (required) to the nodes table. Comma-separated, same convention as combine_data(): all
+# three lists must have the same number of entries, and DATA_ROOT (if set) is prepended
+# to relative entries in DATA_META_PATHS.
+DATA_ROOT = os.getenv("DATA_ROOT")
+DATA_META_PATHS = os.getenv("DATA_META_PATHS")
+DATA_LABEL_COLUMNS = os.getenv("DATA_LABEL_COLUMNS")
+DATA_TYPE_COLUMNS = os.getenv("DATA_TYPE_COLUMNS")
+
+# Optional per-source enrichment columns (display_name/description/xref/group) for the
+# nodes table - the backend doesn't need these for scoring, but the DB wants them where
+# available. Same length as DATA_META_PATHS if set; use an empty entry to skip a source
+# that doesn't have that column. Left entirely unset, nodes just get no enrichment.
+DATA_DP_NAME_COLUMNS = os.getenv("DATA_DP_NAME_COLUMNS")
+DATA_DESCRIPTION_COLUMNS = os.getenv("DATA_DESCRIPTION_COLUMNS")
+DATA_XREF_COLUMNS = os.getenv("DATA_XREF_COLUMNS")
+DATA_GROUP_COLUMNS = os.getenv("DATA_GROUP_COLUMNS")
 EXTRA_EDGES = os.getenv("EXTRA_EDGES")
 VARIANT_META_PATH = os.getenv("VARIANT_META_PATH")
 
@@ -127,7 +133,7 @@ COHORT_COLUMNS = {
 
 # Other settings
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE")) if os.getenv("CHUNK_SIZE") else 10_000_000
-VISUALIZE = True if os.getenv("VISUALIZE").lower() == "true" else False
+VISUALIZE = os.getenv("VISUALIZE", "false").lower() == "true"
 
 
 logger.debug("---------- Database settings ----------")

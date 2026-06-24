@@ -1,7 +1,8 @@
 """
 Populate the new database structure:
-  - nodes               : all nodes regardless of biological type, read from a single file
-                          (includes data_type and an optional grouping column)
+  - nodes               : all nodes regardless of biological type, combined from any
+                          number of data sources (includes data_type and an optional
+                          grouping column)
   - edges_parametric    : association scores from a parametric test run
   - edges_nonparametric : association scores from a nonparametric test run
 
@@ -9,9 +10,22 @@ At least one of PARAMETRIC_EDGES_PATH / NONPARAMETRIC_EDGES_PATH must be set; if
 are set, both tables are populated independently. Queries always use one table or the
 other — they are never mixed.
 
-Nodes file columns are configured via NODES_LABEL_COLUMN / NODES_TYPE_COLUMN
-(required) and NODES_DP_NAME_COLUMN / NODES_DESCRIPTION_COLUMN / NODES_XREF_COLUMN /
-NODES_GROUP_COLUMN (optional) in the environment, see utils.settings.NODES_COLUMNS.
+Nodes are combined from any number of data sources (e.g. phenotypes, proteins,
+metabolites), mirroring DHN-backend's network.utils.data_manager.combine_data():
+configured via the comma-separated DATA_META_PATHS / DATA_LABEL_COLUMNS /
+DATA_TYPE_COLUMNS, which must all have the same number of entries (one per source, at
+least one required). DATA_ROOT, if set, is prepended to relative entries in
+DATA_META_PATHS. Each source contributes label/type (required) to the nodes table,
+matching what the backend uses for scoring.
+
+The backend doesn't need them for scoring, but the DB additionally wants
+display_name/description/xref/group per node where available. These are optional,
+per-source columns: DATA_DP_NAME_COLUMNS / DATA_DESCRIPTION_COLUMNS /
+DATA_XREF_COLUMNS / DATA_GROUP_COLUMNS. If set, each must have the same number of
+comma-separated entries as DATA_META_PATHS (use an empty entry to skip a source that
+doesn't have that column). Left unset entirely, nodes just get no enrichment
+(display_name falls back to the node id, the rest stay NULL) - the program never fails
+because these are missing.
 
 Expected scores CSV format (produced by the association-score package):
     index, label1, label2, raw-P, raw-E, test_type
@@ -35,8 +49,10 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from utils.models import Base, Node, EdgeParametric, EdgeNonparametric
 from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME,
-                            PARAMETRIC_EDGES_PATH, NONPARAMETRIC_EDGES_PATH, NODES_META_PATH,
-                            NODES_COLUMNS, CHUNK_SIZE, get_logger)
+                            PARAMETRIC_EDGES_PATH, NONPARAMETRIC_EDGES_PATH, CHUNK_SIZE, get_logger,
+                            DATA_ROOT, DATA_META_PATHS, DATA_LABEL_COLUMNS, DATA_TYPE_COLUMNS,
+                            DATA_DP_NAME_COLUMNS, DATA_DESCRIPTION_COLUMNS,
+                            DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS)
 
 logger = get_logger(__name__)
 
@@ -103,6 +119,124 @@ def _copy_dataframe(session: Session, df: pd.DataFrame, table: str, columns: lis
     raw_conn.commit()
 
 
+def _parse_list_env(value: str | None) -> list[str]:
+    """Parse a comma-separated env var into a list of stripped, non-empty strings."""
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _parse_aligned_list_env(value: str | None, expected_length: int, env_var: str) -> list[str]:
+    """
+    Parse an optional comma-separated env var into a list aligned 1:1 with the data
+    sources. Unlike _parse_list_env, empty entries are kept (not dropped) so position
+    still lines up with DATA_META_PATHS - use an empty entry to skip a source that
+    doesn't have that column. If unset entirely, returns `expected_length` empty
+    strings (no enrichment for any source).
+    """
+    if not value:
+        return [""] * expected_length
+
+    parts = [item.strip() for item in value.split(",")]
+    if len(parts) != expected_length:
+        raise ValueError(
+            f"{env_var} has {len(parts)} comma-separated entries, expected {expected_length} "
+            f"(one per DATA_META_PATHS entry; use an empty entry to skip a source)."
+        )
+    return parts
+
+
+def _resolve_path(path: str, root: str | None) -> str:
+    """Join a relative path with `root` (if set); absolute paths are returned unchanged."""
+    if root and not os.path.isabs(path):
+        return os.path.join(root, path)
+    return path
+
+
+def _apply_type_column(meta: pd.DataFrame, type_column: str) -> pd.DataFrame:
+    """
+    Rename `type_column` to 'data_type' if it is an existing column in `meta`.
+    Otherwise treat `type_column` as a literal type value applied to every row.
+    Mirrors DHN-backend's network.utils.data_manager._apply_type_column.
+    """
+    if type_column in meta.columns:
+        return meta.rename(columns={type_column: 'data_type'})
+    meta = meta.copy()
+    meta['data_type'] = type_column
+    return meta
+
+
+def _load_node_source(meta_path: str, label_column: str, type_column: str,
+                      name_column: str, desc_column: str, xref_column: str, group_column: str) -> pd.DataFrame:
+    """
+    Read one meta file into a [node_id, display_name, data_type, node_group,
+    description, xrefs] frame. name/desc/xref/group_column are optional (pass "" to
+    skip); display_name falls back to node_id and the rest stay NULL when skipped or
+    not present in this file.
+    """
+    df = read_data_cached(meta_path)
+    if label_column not in df.columns:
+        raise ValueError(f"Column '{label_column}' not found in {meta_path}")
+
+    df = df.rename(columns={label_column: 'node_id'})
+    df = _apply_type_column(df, type_column)
+    df = df.dropna(subset=['node_id'])
+
+    return pd.DataFrame({
+        'node_id': df['node_id'],
+        'display_name': df[name_column] if name_column and name_column in df.columns else df['node_id'],
+        'data_type': df['data_type'],
+        'node_group': df[group_column] if group_column and group_column in df.columns else None,
+        'description': df[desc_column] if desc_column and desc_column in df.columns else None,
+        'xrefs': df[xref_column] if xref_column and xref_column in df.columns else None,
+    })
+
+
+def build_combined_nodes() -> pd.DataFrame:
+    """
+    Build the combined nodes table from DATA_META_PATHS, mirroring DHN-backend's
+    network.utils.data_manager.combine_data(): one entry per data source, each
+    contributing label/type (required). DATA_DP_NAME_COLUMNS/DATA_DESCRIPTION_COLUMNS/
+    DATA_XREF_COLUMNS/DATA_GROUP_COLUMNS optionally add display_name/description/xref/
+    group per source - the backend doesn't need these for scoring, but the DB wants
+    them where available. Missing optional columns are stored as NULL; display name
+    falls back to the node id.
+    """
+    meta_paths = _parse_list_env(DATA_META_PATHS)
+    label_columns = _parse_list_env(DATA_LABEL_COLUMNS)
+    type_columns = _parse_list_env(DATA_TYPE_COLUMNS)
+
+    if not (len(meta_paths) == len(label_columns) == len(type_columns)):
+        raise ValueError(
+            "DATA_META_PATHS, DATA_LABEL_COLUMNS and DATA_TYPE_COLUMNS must all have "
+            "the same number of comma-separated entries."
+        )
+    if not meta_paths:
+        raise ValueError(
+            "No node source configured. Set DATA_META_PATHS, DATA_LABEL_COLUMNS and DATA_TYPE_COLUMNS."
+        )
+
+    name_columns = _parse_aligned_list_env(DATA_DP_NAME_COLUMNS, len(meta_paths), 'DATA_DP_NAME_COLUMNS')
+    desc_columns = _parse_aligned_list_env(DATA_DESCRIPTION_COLUMNS, len(meta_paths), 'DATA_DESCRIPTION_COLUMNS')
+    xref_columns = _parse_aligned_list_env(DATA_XREF_COLUMNS, len(meta_paths), 'DATA_XREF_COLUMNS')
+    group_columns = _parse_aligned_list_env(DATA_GROUP_COLUMNS, len(meta_paths), 'DATA_GROUP_COLUMNS')
+
+    frames = []
+    for meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column in zip(
+        meta_paths, label_columns, type_columns, name_columns, desc_columns, xref_columns, group_columns
+    ):
+        meta_path = _resolve_path(meta_path, DATA_ROOT)
+        frames.append(_load_node_source(
+            meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column
+        ))
+
+    combined = pd.concat(frames, ignore_index=True)
+    duplicates = combined['node_id'].duplicated()
+    if duplicates.any():
+        logger.warning(f"Dropping {duplicates.sum()} duplicate node id(s) found across node sources.")
+        combined = combined[~duplicates]
+
+    return combined
+
+
 def create_tables(engine) -> None:
     """Create nodes, edges_parametric, and edges_nonparametric if they do not exist."""
     Base.metadata.create_all(
@@ -113,43 +247,13 @@ def create_tables(engine) -> None:
     logger.info("Tables created (or already existed)")
 
 
-def populate_nodes(session: Session, nodes_path: str) -> None:
+def populate_nodes(session: Session) -> None:
     """
-    Read the combined nodes file and insert every node into nodes.
-    Nodes already present are skipped.
-
-    Required columns (NODES_LABEL_COLUMN, NODES_TYPE_COLUMN): unique node id, data type.
-    Optional columns (NODES_DP_NAME_COLUMN, NODES_DESCRIPTION_COLUMN, NODES_XREF_COLUMN,
-    NODES_GROUP_COLUMN): display name, description, xrefs, group. Missing optional
-    columns are stored as NULL, and display name falls back to the node id.
+    Build the combined nodes table (see build_combined_nodes) and insert every node into
+    nodes. Nodes already present are skipped.
     """
     start = time.perf_counter()
-    logger.info(f"Loading nodes from {nodes_path}")
-    df = read_data_cached(nodes_path)
-
-    id_col = NODES_COLUMNS['unique_id']
-    type_col = NODES_COLUMNS['data_type']
-    name_col = NODES_COLUMNS['display_name']
-    desc_col = NODES_COLUMNS['description']
-    xref_col = NODES_COLUMNS['xref']
-    group_col = NODES_COLUMNS['group']
-
-    for col, env_var in [(id_col, 'NODES_LABEL_COLUMN'), (type_col, 'NODES_TYPE_COLUMN')]:
-        if not col:
-            raise ValueError(f"{env_var} must be set in the environment")
-        if col not in df.columns:
-            raise ValueError(f"Column '{col}' (from {env_var}) not found in {nodes_path}")
-
-    df = df.dropna(subset=[id_col])
-
-    nodes = pd.DataFrame({
-        'node_id': df[id_col],
-        'display_name': df[name_col] if name_col and name_col in df.columns else df[id_col],
-        'data_type': df[type_col],
-        'node_group': df[group_col] if group_col and group_col in df.columns else None,
-        'description': df[desc_col] if desc_col and desc_col in df.columns else None,
-        'xrefs': df[xref_col] if xref_col and xref_col in df.columns else None,
-    })
+    nodes = build_combined_nodes()
 
     existing_ids = {row[0] for row in session.query(Node.node_id).all()}
     nodes = nodes[~nodes['node_id'].isin(existing_ids)]
@@ -246,7 +350,7 @@ if __name__ == '__main__':
 
     total_start = time.perf_counter()
     create_tables(engine)
-    populate_nodes(db_session, NODES_META_PATH)
+    populate_nodes(db_session)
 
     if PARAMETRIC_EDGES_PATH:
         insert_scores(db_session, PARAMETRIC_EDGES_PATH, table='edges_parametric')
