@@ -41,8 +41,10 @@ Run directly:
 import os
 import time
 import pandas as pd
+import pyarrow as pa
+import pyarrow.csv as pc
 import pyarrow.parquet as pq
-from io import StringIO
+from io import BytesIO
 
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
@@ -106,16 +108,24 @@ def iter_data_chunks(path: str, chunk_size: int = CHUNK_SIZE):
 
 
 def _copy_dataframe(session: Session, df: pd.DataFrame, table: str, columns: list[str]) -> None:
-    """Bulk-insert a DataFrame into a table via PostgreSQL COPY."""
-    buffer = StringIO()
-    df[columns].to_csv(buffer, index=False, header=False, na_rep='')
+    """
+    Bulk-insert a DataFrame into a table via PostgreSQL COPY. Serializes via PyArrow
+    (much faster than pandas' to_csv for large frames) and disables triggers for the
+    duration of the COPY to skip per-row FK validation - callers are expected to have
+    already filtered rows so their FKs are valid (see insert_scores' known_nodes check).
+    """
+    buffer = BytesIO()
+    arrow_table = pa.Table.from_pandas(df[columns], preserve_index=False)
+    pc.write_csv(arrow_table, buffer, write_options=pc.WriteOptions(include_header=False, quoting_style=None))
     buffer.seek(0)
 
     raw_conn = session.connection().connection
     with raw_conn.cursor() as cursor:
         col_list = ', '.join(columns)
         copy_sql = f"COPY {table} ({col_list}) FROM STDIN WITH (FORMAT CSV, NULL '')"
+        cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER ALL")
         cursor.copy_expert(copy_sql, buffer)
+        cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER ALL")
     raw_conn.commit()
 
 
@@ -164,13 +174,29 @@ def _apply_type_column(meta: pd.DataFrame, type_column: str) -> pd.DataFrame:
     return meta
 
 
+def _apply_literal_or_column(meta: pd.DataFrame, column_or_literal: str) -> pd.Series | None:
+    """
+    Return `column_or_literal`'s values if it names an existing column in `meta`;
+    otherwise treat it as a literal value applied to every row (e.g. a fixed group
+    name for a source with no per-row grouping of its own). Returns None if
+    `column_or_literal` is falsy (the attribute isn't configured for this source).
+    Mirrors DHN-backend's network.utils.data_manager._apply_literal_or_column.
+    """
+    if not column_or_literal:
+        return None
+    if column_or_literal in meta.columns:
+        return meta[column_or_literal]
+    return pd.Series(column_or_literal, index=meta.index)
+
+
 def _load_node_source(meta_path: str, label_column: str, type_column: str,
                       name_column: str, desc_column: str, xref_column: str, group_column: str) -> pd.DataFrame:
     """
     Read one meta file into a [node_id, display_name, data_type, node_group,
     description, xrefs] frame. name/desc/xref/group_column are optional (pass "" to
-    skip); display_name falls back to node_id and the rest stay NULL when skipped or
-    not present in this file.
+    skip) and, like type_column, may each be either a column name in this meta file
+    or a literal value applied to every row. display_name falls back to node_id and
+    the rest stay NULL when skipped.
     """
     df = read_data_cached(meta_path)
     if label_column not in df.columns:
@@ -180,13 +206,15 @@ def _load_node_source(meta_path: str, label_column: str, type_column: str,
     df = _apply_type_column(df, type_column)
     df = df.dropna(subset=['node_id'])
 
+    display_name = _apply_literal_or_column(df, name_column)
+
     return pd.DataFrame({
         'node_id': df['node_id'],
-        'display_name': df[name_column] if name_column and name_column in df.columns else df['node_id'],
+        'display_name': display_name if display_name is not None else df['node_id'],
         'data_type': df['data_type'],
-        'node_group': df[group_column] if group_column and group_column in df.columns else None,
-        'description': df[desc_column] if desc_column and desc_column in df.columns else None,
-        'xrefs': df[xref_column] if xref_column and xref_column in df.columns else None,
+        'node_group': _apply_literal_or_column(df, group_column),
+        'description': _apply_literal_or_column(df, desc_column),
+        'xrefs': _apply_literal_or_column(df, xref_column),
     })
 
 
