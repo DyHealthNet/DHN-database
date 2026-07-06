@@ -55,6 +55,7 @@ from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME,
                             DATA_ROOT, DATA_META_PATHS, DATA_LABEL_COLUMNS, DATA_TYPE_COLUMNS,
                             DATA_DP_NAME_COLUMNS, DATA_DESCRIPTION_COLUMNS,
                             DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS)
+from utils.database_views import add_indexes_new
 
 logger = get_logger(__name__)
 
@@ -389,6 +390,9 @@ if __name__ == '__main__':
         insert_scores(db_session, NONPARAMETRIC_EDGES_PATH, table='edges_nonparametric')
     else:
         logger.info("NONPARAMETRIC_EDGES_PATH not set, skipping edges_nonparametric")
+
+    logger.info("Adding indexes...")
+    add_indexes_new(db_session, engine)
 
     db_session.close()
     logger.info(f"Database population complete in {time.perf_counter() - total_start:.2f}s.")

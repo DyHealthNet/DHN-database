@@ -1,3 +1,5 @@
+import time
+
 from sqlalchemy import text, Table, MetaData
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Engine
@@ -138,4 +140,41 @@ def add_indexes(session: Session, engine: Engine, metadata: MetaData):
     session.execute(text("CREATE INDEX idx_description_fts "
                          "ON view_description_fts USING gin(to_tsvector('english', description));"))
     logger.info("Created indexes")
+    session.commit()
+
+
+def add_indexes_new(session: Session, engine: Engine):
+    """
+    Create indexes for the new schema (nodes, edges_parametric, edges_nonparametric), mirroring
+    the indexes add_indexes() creates for the old schema's edge and view tables.
+    """
+    start = time.perf_counter()
+
+    # node_id_1/node_id_2 indexes for quick neighbor lookups, one pair per edge table
+    for edge_model, table_name in [(EdgeParametric, 'edges_parametric'), (EdgeNonparametric, 'edges_nonparametric')]:
+        idx_node_id_1 = Index(f'idx_{table_name}_node_id_1', edge_model.node_id_1)
+        if not session.execute(text(f"SELECT to_regclass('idx_{table_name}_node_id_1')")).scalar():
+            idx_node_id_1.create(engine)
+
+        idx_node_id_2 = Index(f'idx_{table_name}_node_id_2', edge_model.node_id_2)
+        if not session.execute(text(f"SELECT to_regclass('idx_{table_name}_node_id_2')")).scalar():
+            idx_node_id_2.create(engine)
+
+    # indexes for quick typeahead search
+    idx_nodes_display_name = Index('idx_nodes_display_name', Node.display_name)
+    if not session.execute(text("SELECT to_regclass('idx_nodes_display_name')")).scalar():
+        idx_nodes_display_name.create(engine)
+
+    idx_nodes_node_group = Index('idx_nodes_node_group', Node.node_group)
+    if not session.execute(text("SELECT to_regclass('idx_nodes_node_group')")).scalar():
+        idx_nodes_node_group.create(engine)
+
+    # add the last index that doesn't work well with sqlalchemy
+    if session.execute(text("SELECT to_regclass('idx_nodes_description_fts')")).scalar():
+        logger.info(f"Index idx_nodes_description_fts already exists. ({time.perf_counter() - start:.2f}s)")
+        session.commit()
+        return
+    session.execute(text("CREATE INDEX idx_nodes_description_fts "
+                         "ON nodes USING gin(to_tsvector('english', description));"))
+    logger.info(f"Created indexes for new schema in {time.perf_counter() - start:.2f}s")
     session.commit()
