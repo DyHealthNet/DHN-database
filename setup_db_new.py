@@ -54,7 +54,7 @@ from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME,
                             PARAMETRIC_EDGES_PATH, NONPARAMETRIC_EDGES_PATH, CHUNK_SIZE, get_logger,
                             DATA_ROOT, DATA_META_PATHS, DATA_LABEL_COLUMNS, DATA_TYPE_COLUMNS,
                             DATA_DP_NAME_COLUMNS, DATA_DESCRIPTION_COLUMNS,
-                            DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS)
+                            DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS, DATA_DIR)
 from utils.database_views import add_indexes_new
 
 logger = get_logger(__name__)
@@ -67,7 +67,14 @@ _VALID_EDGE_TABLES = {'edges_parametric', 'edges_nonparametric'}
 def _ensure_parquet_cache(path: str) -> str:
     """
     Return the path to a parquet version of the given CSV/TSV/Parquet file,
-    creating the cache (alongside the source file) if it doesn't exist or is stale.
+    creating the cache if it doesn't exist or is stale.
+
+    Cached under DATA_DIR (a directory this process is expected to own) rather than
+    alongside the source file, since source files often live on shared, read-only
+    mounts (e.g. DATA_ROOT pointing at another user's data) this process has no
+    write access to. The cache filename is just the source's basename, so two
+    sources with the same basename in different directories will collide.
+    Falls back to caching alongside the source file if DATA_DIR isn't configured.
     """
     file_name, ending = os.path.splitext(path)
     ending = ending.lower()
@@ -77,9 +84,15 @@ def _ensure_parquet_cache(path: str) -> str:
     if ending not in ['.csv', '.tsv']:
         raise ValueError(f"Unsupported file format: {ending}. Only CSV, TSV and Parquet files are supported.")
 
-    parquet_path = f"{file_name}.parquet"
+    if DATA_DIR:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        cache_name = os.path.basename(file_name) + '.parquet'
+        parquet_path = os.path.join(DATA_DIR, cache_name)
+    else:
+        parquet_path = f"{file_name}.parquet"
+
     if not os.path.exists(parquet_path) or os.path.getmtime(path) > os.path.getmtime(parquet_path):
-        logger.debug(f"Creating parquet cache for {path}")
+        logger.debug(f"Creating parquet cache for {path} at {parquet_path}")
         sep = ',' if ending == '.csv' else '\t'
         df = pd.read_csv(path, sep=sep, low_memory=False)
         df.to_parquet(parquet_path)
