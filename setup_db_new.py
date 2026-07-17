@@ -143,6 +143,53 @@ def _copy_dataframe(session: Session, df: pd.DataFrame, table: str, columns: lis
     raw_conn.commit()
 
 
+def _copy_edges_ignoring_conflicts(raw_conn, df: pd.DataFrame, columns: list[str],
+                                    table: str, staging_table: str) -> int:
+    """
+    Load `df` into `table` (edges_parametric/edges_nonparametric) via a
+    session-scoped staging table plus a single set-based `INSERT ... ON CONFLICT
+    DO NOTHING`, canonicalizing node_id_1/node_id_2 order (LEAST/GREATEST) as
+    part of that same INSERT.
+
+    Canonicalizing here in SQL -- not earlier in pandas -- matters: Postgres's
+    default locale collation doesn't sort strings the same way Python's plain
+    Unicode code-point comparison does (verified empirically against this
+    database: 'hcu' < 'M01A' under its en_US.utf8 collation, but 'M01A' < 'hcu'
+    in Python). The table's UniqueConstraint on (node_id_1, node_id_2) is itself
+    collation-based, so only a same-collation LEAST/GREATEST is guaranteed to
+    agree with it -- a Python-side min/max can canonicalize a pair to the
+    opposite order from what's already stored, silently defeating the
+    constraint for exactly the mixed-case ids where the two orderings disagree.
+
+    Returns the number of rows actually inserted.
+    """
+    buffer = BytesIO()
+    arrow_table = pa.Table.from_pandas(df[columns], preserve_index=False)
+    pc.write_csv(arrow_table, buffer, write_options=pc.WriteOptions(include_header=False, quoting_style=None))
+    buffer.seek(0)
+
+    col_list = ', '.join(columns)
+    with raw_conn.cursor() as cursor:
+        cursor.execute(f"TRUNCATE {staging_table}")
+        cursor.copy_expert(f"COPY {staging_table} ({col_list}) FROM STDIN WITH (FORMAT CSV, NULL '')", buffer)
+        # Unique-constraint enforcement (what ON CONFLICT below relies on) is
+        # index-based, not trigger-based, so disabling triggers here still only
+        # skips the (already pre-validated via known_nodes) FK checks, same as
+        # the plain _copy_dataframe path.
+        cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER ALL")
+        cursor.execute(f"""
+            INSERT INTO {table} (node_id_1, node_id_2, p_value, effect_size, test_type)
+            SELECT LEAST(node_id_1, node_id_2), GREATEST(node_id_1, node_id_2),
+                   p_value, effect_size, test_type
+            FROM {staging_table}
+            ON CONFLICT (node_id_1, node_id_2) DO NOTHING
+        """)
+        inserted = cursor.rowcount
+        cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER ALL")
+    raw_conn.commit()
+    return inserted
+
+
 def _parse_list_env(value: str | None) -> list[str]:
     """Parse a comma-separated env var into a list of stripped, non-empty strings."""
     return [item.strip() for item in (value or "").split(",") if item.strip()]
@@ -319,6 +366,16 @@ def insert_scores(session: Session, edges_path: str, table: str,
     Expected columns: label1, label2, raw-P, raw-E, test_type.
     Rows missing raw-P or whose node IDs are not present in nodes are skipped.
 
+    node_id_1/node_id_2 are canonicalized (smaller node_id first) so a pair already
+    loaded in either order is recognized as the same undirected edge: rows that
+    collide with an already-present pair (via the table's UniqueConstraint, see
+    edges_parametric_pair_unique/edges_nonparametric_pair_unique in utils/models.py)
+    are skipped via `ON CONFLICT DO NOTHING` rather than inserted as a duplicate.
+    This makes re-running against an already-populated table a cheap no-op instead
+    of appending a second full copy of every edge -- the dedup check itself is a
+    Postgres index lookup done set-at-a-time per chunk, not a Python-side membership
+    test against the whole existing table, so it stays cheap as the table grows.
+
     :param session:     SQLAlchemy session connected to the target database.
     :param edges_path:  Path to the scores CSV/TSV/Parquet file.
     :param table:       Target table name ('edges_parametric' or 'edges_nonparametric').
@@ -339,7 +396,23 @@ def insert_scores(session: Session, edges_path: str, table: str,
     # FK safety: only insert edges whose both node IDs exist in nodes
     known_nodes = {row[0] for row in session.query(Node.node_id).all()}
 
+    edge_columns = ['node_id_1', 'node_id_2', 'p_value', 'effect_size', 'test_type']
+    staging_table = f"_{table}_staging"
+    raw_conn = session.connection().connection
+    with raw_conn.cursor() as cursor:
+        # No id/constraints here on purpose -- this only ever holds one chunk at a
+        # time before being merged into `table` via ON CONFLICT, see
+        # _copy_dataframe_ignoring_conflicts.
+        cursor.execute(f"""
+            CREATE TEMP TABLE IF NOT EXISTS {staging_table} (
+                node_id_1 varchar, node_id_2 varchar,
+                p_value double precision, effect_size double precision, test_type varchar
+            ) ON COMMIT PRESERVE ROWS
+        """)
+    raw_conn.commit()
+
     total_inserted = 0
+    total_duplicate = 0
     total_skipped = 0
     for df in iter_data_chunks(edges_path, chunk_size):
         df = df.loc[:, [c for c in df.columns if not c.startswith('Unnamed')]]
@@ -359,16 +432,26 @@ def insert_scores(session: Session, edges_path: str, table: str,
 
         df = df.rename(columns={'label1': 'node_id_1', 'label2': 'node_id_2', 'raw-P': 'p_value', 'raw-E': 'effect_size'})
 
-        _copy_dataframe(session, df, table, ['node_id_1', 'node_id_2', 'p_value', 'effect_size', 'test_type'])
-        total_inserted += len(df)
+        # Pair order (smaller node_id first) is canonicalized in SQL inside
+        # _copy_edges_ignoring_conflicts, not here -- see its docstring for why.
+        chunk_len = len(df)
+        inserted = _copy_edges_ignoring_conflicts(raw_conn, df, edge_columns, table, staging_table)
+        total_inserted += inserted
+        total_duplicate += chunk_len - inserted
+
+    with raw_conn.cursor() as cursor:
+        cursor.execute(f"DROP TABLE IF EXISTS {staging_table}")
+    raw_conn.commit()
 
     elapsed = time.perf_counter() - start
     if total_skipped:
         logger.warning(f"Skipped {total_skipped} edges with node IDs not in nodes")
+    if total_duplicate:
+        logger.info(f"Skipped {total_duplicate} edges already present in {table}")
     if total_inserted:
         logger.info(f"Inserted {total_inserted} rows into {table} in {elapsed:.2f}s")
     else:
-        logger.warning(f"No valid edges to insert into {table} ({elapsed:.2f}s)")
+        logger.warning(f"No new edges to insert into {table} ({elapsed:.2f}s)")
 
 
 if __name__ == '__main__':

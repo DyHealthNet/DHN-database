@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, ARRAY, Float, Index, JSON
+from sqlalchemy import Column, String, Integer, ForeignKey, ARRAY, Float, Index, JSON, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 
 # Create a declarative base
@@ -439,6 +439,12 @@ class Node(Base):
 
 class EdgeParametric(Base):
     __tablename__ = 'edges_parametric'
+    # node_id_1/node_id_2 are canonicalized (smaller node_id always first, see
+    # insert_scores()) so this constraint catches a pair regardless of which
+    # order it was loaded in -- an undirected edge is the same edge either way.
+    __table_args__ = (
+        UniqueConstraint('node_id_1', 'node_id_2', name='edges_parametric_pair_unique'),
+    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     node_id_1 = Column(String, ForeignKey('nodes.node_id'))
     node_id_2 = Column(String, ForeignKey('nodes.node_id'))
@@ -449,6 +455,9 @@ class EdgeParametric(Base):
 
 class EdgeNonparametric(Base):
     __tablename__ = 'edges_nonparametric'
+    __table_args__ = (
+        UniqueConstraint('node_id_1', 'node_id_2', name='edges_nonparametric_pair_unique'),
+    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     node_id_1 = Column(String, ForeignKey('nodes.node_id'))
     node_id_2 = Column(String, ForeignKey('nodes.node_id'))
