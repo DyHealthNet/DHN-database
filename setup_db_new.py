@@ -19,13 +19,13 @@ DATA_META_PATHS. Each source contributes label/type (required) to the nodes tabl
 matching what the backend uses for scoring.
 
 The backend doesn't need them for scoring, but the DB additionally wants
-display_name/description/xref/group per node where available. These are optional,
-per-source columns: DATA_DP_NAME_COLUMNS / DATA_DESCRIPTION_COLUMNS /
-DATA_XREF_COLUMNS / DATA_GROUP_COLUMNS. If set, each must have the same number of
-comma-separated entries as DATA_META_PATHS (use an empty entry to skip a source that
-doesn't have that column). Left unset entirely, nodes just get no enrichment
-(display_name falls back to the node id, the rest stay NULL) - the program never fails
-because these are missing.
+display_name/description/xref/group/subgroup per node where available. These are
+optional, per-source columns: DATA_DP_NAME_COLUMNS / DATA_DESCRIPTION_COLUMNS /
+DATA_XREF_COLUMNS / DATA_GROUP_COLUMNS / DATA_SUBGROUP_COLUMNS. If set, each must have
+the same number of comma-separated entries as DATA_META_PATHS (use an empty entry to
+skip a source that doesn't have that column). Left unset entirely, nodes just get no
+enrichment (display_name falls back to the node id, the rest stay NULL) - the program
+never fails because these are missing.
 
 Expected scores CSV format (produced by the association-score package):
     index, label1, label2, raw-P, raw-E, test_type
@@ -38,6 +38,7 @@ arbitrarily large files can be inserted without loading them fully into memory.
 Run directly:
     python setup_db_new.py
 """
+import argparse
 import os
 import time
 import pandas as pd
@@ -54,7 +55,7 @@ from utils.settings import (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME,
                             PARAMETRIC_EDGES_PATH, NONPARAMETRIC_EDGES_PATH, CHUNK_SIZE, get_logger,
                             DATA_ROOT, DATA_META_PATHS, DATA_LABEL_COLUMNS, DATA_TYPE_COLUMNS,
                             DATA_DP_NAME_COLUMNS, DATA_DESCRIPTION_COLUMNS,
-                            DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS, DATA_DIR)
+                            DATA_XREF_COLUMNS, DATA_GROUP_COLUMNS, DATA_SUBGROUP_COLUMNS, DATA_DIR)
 from utils.database_views import add_indexes_new
 
 logger = get_logger(__name__)
@@ -251,13 +252,14 @@ def _apply_literal_or_column(meta: pd.DataFrame, column_or_literal: str) -> pd.S
 
 
 def _load_node_source(meta_path: str, label_column: str, type_column: str,
-                      name_column: str, desc_column: str, xref_column: str, group_column: str) -> pd.DataFrame:
+                      name_column: str, desc_column: str, xref_column: str, group_column: str,
+                      subgroup_column: str) -> pd.DataFrame:
     """
     Read one meta file into a [node_id, display_name, data_type, node_group,
-    description, xrefs] frame. name/desc/xref/group_column are optional (pass "" to
-    skip) and, like type_column, may each be either a column name in this meta file
-    or a literal value applied to every row. display_name falls back to node_id and
-    the rest stay NULL when skipped.
+    node_subgroup, description, xrefs] frame. name/desc/xref/group/subgroup_column are
+    optional (pass "" to skip) and, like type_column, may each be either a column name
+    in this meta file or a literal value applied to every row. display_name falls back
+    to node_id and the rest stay NULL when skipped.
     """
     df = read_data_cached(meta_path)
     if label_column not in df.columns:
@@ -274,6 +276,7 @@ def _load_node_source(meta_path: str, label_column: str, type_column: str,
         'display_name': display_name if display_name is not None else df['node_id'],
         'data_type': df['data_type'],
         'node_group': _apply_literal_or_column(df, group_column),
+        'node_subgroup': _apply_literal_or_column(df, subgroup_column),
         'description': _apply_literal_or_column(df, desc_column),
         'xrefs': _apply_literal_or_column(df, xref_column),
     })
@@ -284,10 +287,10 @@ def build_combined_nodes() -> pd.DataFrame:
     Build the combined nodes table from DATA_META_PATHS, mirroring DHN-backend's
     network.utils.data_manager.combine_data(): one entry per data source, each
     contributing label/type (required). DATA_DP_NAME_COLUMNS/DATA_DESCRIPTION_COLUMNS/
-    DATA_XREF_COLUMNS/DATA_GROUP_COLUMNS optionally add display_name/description/xref/
-    group per source - the backend doesn't need these for scoring, but the DB wants
-    them where available. Missing optional columns are stored as NULL; display name
-    falls back to the node id.
+    DATA_XREF_COLUMNS/DATA_GROUP_COLUMNS/DATA_SUBGROUP_COLUMNS optionally add
+    display_name/description/xref/group/subgroup per source - the backend doesn't need
+    these for scoring, but the DB wants them where available. Missing optional columns
+    are stored as NULL; display name falls back to the node id.
     """
     meta_paths = _parse_list_env(DATA_META_PATHS)
     label_columns = _parse_list_env(DATA_LABEL_COLUMNS)
@@ -307,14 +310,15 @@ def build_combined_nodes() -> pd.DataFrame:
     desc_columns = _parse_aligned_list_env(DATA_DESCRIPTION_COLUMNS, len(meta_paths), 'DATA_DESCRIPTION_COLUMNS')
     xref_columns = _parse_aligned_list_env(DATA_XREF_COLUMNS, len(meta_paths), 'DATA_XREF_COLUMNS')
     group_columns = _parse_aligned_list_env(DATA_GROUP_COLUMNS, len(meta_paths), 'DATA_GROUP_COLUMNS')
+    subgroup_columns = _parse_aligned_list_env(DATA_SUBGROUP_COLUMNS, len(meta_paths), 'DATA_SUBGROUP_COLUMNS')
 
     frames = []
-    for meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column in zip(
-        meta_paths, label_columns, type_columns, name_columns, desc_columns, xref_columns, group_columns
+    for meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column, subgroup_column in zip(
+        meta_paths, label_columns, type_columns, name_columns, desc_columns, xref_columns, group_columns, subgroup_columns
     ):
         meta_path = _resolve_path(meta_path, DATA_ROOT)
         frames.append(_load_node_source(
-            meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column
+            meta_path, label_column, type_column, name_column, desc_column, xref_column, group_column, subgroup_column
         ))
 
     combined = pd.concat(frames, ignore_index=True)
@@ -336,6 +340,52 @@ def create_tables(engine) -> None:
     logger.info("Tables created (or already existed)")
 
 
+def drop_tables(engine) -> None:
+    """
+    Drop nodes, edges_parametric, and edges_nonparametric (CASCADE, so anything
+    referencing them, e.g. their indexes/FKs, goes with them).
+
+    Also drops every per-context table (edges_parametric_<context_id> /
+    edges_nonparametric_<context_id>, created on demand by DHN-backend's
+    network/contexts/contexts.py when a user builds a context) since those were
+    computed against the data being replaced and would otherwise silently go stale.
+    context and user_context (DHN-backend's network.models.Context /
+    UserContextLink tables) are cleared -- not dropped, the Django app still owns
+    their schema -- since every context they reference no longer exists.
+
+    Only ever called when --overwrite is passed; create_tables() recreates
+    nodes/edges_parametric/edges_nonparametric fresh right after, and
+    add_indexes_new() rebuilds their indexes at the end of the run.
+    """
+    logger.warning(
+        "--overwrite passed: dropping edges_parametric, edges_nonparametric, nodes, and all "
+        "per-context edges_*_<context_id> tables; clearing context and user_context."
+    )
+    with engine.connect() as conn:
+        context_tables = conn.execute(text("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_name ~ '^edges_(parametric|nonparametric)_[0-9]+$'
+        """)).scalars().all()
+        for table in context_tables:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+        if context_tables:
+            logger.info(f"Dropped {len(context_tables)} per-context edges table(s): {context_tables}")
+
+        existing_link_tables = set(conn.execute(text("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_name IN ('user_context', 'context')
+        """)).scalars().all())
+        for table in ('user_context', 'context'):
+            if table in existing_link_tables:
+                conn.execute(text(f"DELETE FROM {table}"))
+            else:
+                logger.debug(f"{table} table not present, skipping clear")
+
+        for table in ('edges_parametric', 'edges_nonparametric', 'nodes'):
+            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+        conn.commit()
+
+
 def populate_nodes(session: Session) -> None:
     """
     Build the combined nodes table (see build_combined_nodes) and insert every node into
@@ -352,7 +402,7 @@ def populate_nodes(session: Session) -> None:
         return
 
     _copy_dataframe(session, nodes, 'nodes',
-                    ['node_id', 'display_name', 'data_type', 'node_group', 'description', 'xrefs'])
+                    ['node_id', 'display_name', 'data_type', 'node_group', 'node_subgroup', 'description', 'xrefs'])
     logger.info(f"Inserted {len(nodes)} nodes in {time.perf_counter() - start:.2f}s")
 
 
@@ -455,6 +505,16 @@ def insert_scores(session: Session, edges_path: str, table: str,
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        '--overwrite', action='store_true',
+        help="Drop nodes, edges_parametric, edges_nonparametric, and all per-context edges_*_<id> "
+             "tables before repopulating, and clear the context/user_context tables (since every "
+             "context they reference becomes invalid), instead of the default behavior (existing "
+             "nodes/edges/contexts are left as-is, only new rows are added)."
+    )
+    args = parser.parse_args()
+
     if not PARAMETRIC_EDGES_PATH and not NONPARAMETRIC_EDGES_PATH:
         raise EnvironmentError(
             "At least one of PARAMETRIC_EDGES_PATH or NONPARAMETRIC_EDGES_PATH must be set. "
@@ -473,17 +533,20 @@ if __name__ == '__main__':
     SessionFactory = sessionmaker(bind=engine)
     db_session = SessionFactory()
 
+    if args.overwrite:
+        drop_tables(engine)
+
     total_start = time.perf_counter()
     create_tables(engine)
     populate_nodes(db_session)
 
     if PARAMETRIC_EDGES_PATH:
-        insert_scores(db_session, PARAMETRIC_EDGES_PATH, table='edges_parametric')
+        insert_scores(db_session, PARAMETRIC_EDGES_PATH, table='edges_parametric', truncate=args.overwrite)
     else:
         logger.info("PARAMETRIC_EDGES_PATH not set, skipping edges_parametric")
 
     if NONPARAMETRIC_EDGES_PATH:
-        insert_scores(db_session, NONPARAMETRIC_EDGES_PATH, table='edges_nonparametric')
+        insert_scores(db_session, NONPARAMETRIC_EDGES_PATH, table='edges_nonparametric', truncate=args.overwrite)
     else:
         logger.info("NONPARAMETRIC_EDGES_PATH not set, skipping edges_nonparametric")
 

@@ -433,6 +433,7 @@ class Node(Base):
     display_name = Column(String)
     data_type = Column(String)
     node_group = Column(String, nullable=True)
+    node_subgroup = Column(String, nullable=True)
     description = Column(String, nullable=True)
     xrefs = Column(String, nullable=True)
 
