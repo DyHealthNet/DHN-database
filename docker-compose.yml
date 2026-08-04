@@ -1,11 +1,13 @@
 services:
-  postgres:
-    container_name: dhn_db
+  postgres2:
+    container_name: dhn_db_2
     image: postgres:16
+    # bound to localhost only: Postgres was previously exposed to the whole network
+    # with the default password, unauthenticated access from outside the host is not acceptable
     ports:
-      - 9852:5432
+      - "127.0.0.1:9853:5432"
     volumes:
-      - DHNpostgres:/var/lib/postgresql/data
+      - DHNpostgres2:/var/lib/postgresql/data
       - /tmp:/tmp
     environment:
       - POSTGRES_PASSWORD=password
@@ -13,4 +15,4 @@ services:
       - POSTGRES_DB=postgres
 
 volumes:
-  DHNpostgres:
+  DHNpostgres2:
