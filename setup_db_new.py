@@ -464,6 +464,7 @@ def insert_scores(session: Session, edges_path: str, table: str,
     total_inserted = 0
     total_duplicate = 0
     total_skipped = 0
+    total_missing = 0
     for df in iter_data_chunks(edges_path, chunk_size):
         df = df.loc[:, [c for c in df.columns if not c.startswith('Unnamed')]]
 
@@ -471,7 +472,10 @@ def insert_scores(session: Session, edges_path: str, table: str,
         if missing_cols:
             raise ValueError(f"Scores file is missing expected columns: {missing_cols}")
 
-        df = df[SCORES_COLUMNS].dropna(subset=['label1', 'label2', 'raw-P'])
+        df = df[SCORES_COLUMNS]
+        na_mask = df[['label1', 'label2', 'raw-P']].isna().any(axis=1)
+        total_missing += int(na_mask.sum())
+        df = df[~na_mask]
 
         fk_mask = df['label1'].isin(known_nodes) & df['label2'].isin(known_nodes)
         total_skipped += int((~fk_mask).sum())
@@ -494,6 +498,8 @@ def insert_scores(session: Session, edges_path: str, table: str,
     raw_conn.commit()
 
     elapsed = time.perf_counter() - start
+    if total_missing:
+        logger.warning(f"Skipped {total_missing} edges with missing label1/label2/raw-P")
     if total_skipped:
         logger.warning(f"Skipped {total_skipped} edges with node IDs not in nodes")
     if total_duplicate:
