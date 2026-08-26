@@ -47,7 +47,10 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
     the relevant metabolites
     """
     if ext_ref is None:
-        ext_ref = ['kegg_id', 'chemspider_id', 'drugbank_id', 'pdb_id', 'wikipedia_id']
+        # chebi_id enables Reactome-based enrichment (Reactome's Analysis Service only
+        # accepts ChEBI for small molecules, not HMDB) -- see nodes.metabolites xrefs
+        # consumed by the frontend's Reactome Enrichment tab.
+        ext_ref = ['kegg_id', 'chemspider_id', 'drugbank_id', 'pdb_id', 'wikipedia_id', 'chebi_id']
 
     assert all([True for ref in ext_ref if ref.endswith('_id')])
 
@@ -77,7 +80,7 @@ def read_hmdb_data(hmdb_file: str, relevant_ids: set[str], ext_ref: list = None,
         description = elem.find('description').text
         metabolite_observation_source = observation_source if any(ac in relevant_ids for ac
                                                                   in [accession] + secondary_accessions) else 'external'
-        # get xrefs from kegg, chemspider, drugbank, pdb, wikipedia
+        # get xrefs from kegg, chemspider, drugbank, pdb, wikipedia, chebi
         xrefs = []
         for ref in ext_ref:
             xref = elem.find(f'{ref}')

@@ -1,3 +1,5 @@
+import time
+
 from sqlalchemy import text, Table, MetaData
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Engine
@@ -95,7 +97,7 @@ def add_views(session: Session):
         logger.info("View view_associations_edges already exists. Refreshed.")
     session.commit()
 
-
+# TODO remove this function and use the new add_indexes_new() function instead, when external node & view table handling is figured out
 def add_indexes(session: Session, engine: Engine, metadata: MetaData):
     # Protein indexes for quick search
     idx_uniprot_id_1 = Index('idx_uniprot_id_1', EffectsProteinProtein.protein_id_1)
@@ -138,4 +140,50 @@ def add_indexes(session: Session, engine: Engine, metadata: MetaData):
     session.execute(text("CREATE INDEX idx_description_fts "
                          "ON view_description_fts USING gin(to_tsvector('english', description));"))
     logger.info("Created indexes")
+    session.commit()
+
+
+def add_indexes_new(session: Session, engine: Engine):
+    """
+    Create indexes for the new schema (nodes, edges_parametric, edges_nonparametric), mirroring
+    the indexes add_indexes() creates for the old schema's edge and view tables.
+    """
+    start = time.perf_counter()
+
+    # node_id_1/node_id_2 indexes for quick neighbor lookups (Q(node_id_1=X) | Q(node_id_2=X),
+    # node_id_1__in/node_id_2__in), and p_value for threshold filtering and ordering
+    # (p_value__lte=thresh, order_by('p_value')) - one set per edge table
+    for edge_model, table_name in [(EdgeParametric, 'edges_parametric'), (EdgeNonparametric, 'edges_nonparametric')]:
+        idx_node_id_1 = Index(f'idx_{table_name}_node_id_1', edge_model.node_id_1)
+        if not session.execute(text(f"SELECT to_regclass('idx_{table_name}_node_id_1')")).scalar():
+            idx_node_id_1.create(engine)
+
+        idx_node_id_2 = Index(f'idx_{table_name}_node_id_2', edge_model.node_id_2)
+        if not session.execute(text(f"SELECT to_regclass('idx_{table_name}_node_id_2')")).scalar():
+            idx_node_id_2.create(engine)
+
+        idx_p_value = Index(f'idx_{table_name}_p_value', edge_model.p_value)
+        if not session.execute(text(f"SELECT to_regclass('idx_{table_name}_p_value')")).scalar():
+            idx_p_value.create(engine)
+
+    # node_group is matched by exact value (node_group__in=groups), a plain btree covers that
+    idx_nodes_node_group = Index('idx_nodes_node_group', Node.node_group)
+    if not session.execute(text("SELECT to_regclass('idx_nodes_node_group')")).scalar():
+        idx_nodes_node_group.create(engine)
+
+    # display_name/description/node_id are searched with icontains (unanchored substring ILIKE),
+    # which neither a plain btree nor a tsvector index can serve - only a pg_trgm trigram GIN
+    # index accelerates that pattern, and does so transparently (no query changes needed).
+    # gin_trgm_ops isn't expressible via sqlalchemy's Index, so this is raw sql throughout.
+    session.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+    for old_index in ['idx_nodes_display_name', 'idx_nodes_description_fts']:
+        session.execute(text(f"DROP INDEX IF EXISTS {old_index};"))
+
+    for column in ['display_name', 'description', 'node_id']:
+        index_name = f'idx_nodes_{column}_trgm'
+        if session.execute(text(f"SELECT to_regclass('{index_name}')")).scalar():
+            continue
+        session.execute(text(f"CREATE INDEX {index_name} ON nodes USING gin ({column} gin_trgm_ops);"))
+
+    logger.info(f"Created indexes for new schema in {time.perf_counter() - start:.2f}s")
     session.commit()
